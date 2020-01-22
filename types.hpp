@@ -9,13 +9,22 @@
 #define __device__
 #endif
 
-#include <cmath>
+#ifndef _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
+#endif
+#include <math.h>
+
 #include <cstddef>
 #include <cstdio>
 #include <iostream>
 #include <vector>
+#include <cmath>
 
-namespace math_types 
+/**
+ *  Vector and Matrix types that can be used on a GPU.
+ */
+
+namespace mt 
 {
 
 template <size_t Len>
@@ -44,73 +53,74 @@ template <size_t Len>
 struct Vector
 {
     float data[Len];
-    __host__ __device__ Vector() {};
-    __host__ __device__ explicit Vector(float val); 
+    __host__ __device__ inline Vector() {};
+    __host__ __device__ inline explicit Vector(float val); 
+    __host__ __device__ inline explicit Vector(float* val);
 
-    __host__ __device__ Vector<Len>& operator=(const Vector<Len>& rhs);
-    __host__ __device__ Vector<Len> operator+(const Vector<Len>& rhs) const;
-    __host__ __device__ Vector<Len> operator-(const Vector<Len>& rhs) const;
-    __host__ __device__ Vector<Len> operator*(float) const;
-    __host__ __device__ Vector<Len> operator/(float) const;
-    __host__ __device__ bool operator==(const Vector<Len>& rhs) const;
-    __host__ __device__ bool operator!=(const Vector<Len>& rhs) const;
+    __host__ __device__ inline Vector<Len>& operator=(const Vector<Len>& rhs);
+    __host__ __device__ inline Vector<Len> operator+(const Vector<Len>& rhs) const;
+    __host__ __device__ inline Vector<Len> operator-(const Vector<Len>& rhs) const;
+    __host__ __device__ inline Vector<Len> operator*(float) const;
+    __host__ __device__ inline Vector<Len> operator/(float) const;
+    __host__ __device__ inline bool operator==(const Vector<Len>& rhs) const;
+    __host__ __device__ inline bool operator!=(const Vector<Len>& rhs) const;
 
-    __host__ __device__ size_t size() { return Len; }
-    __host__ __device__ float length() const;
-    __host__ __device__ bool approx_equal(const Vector<Len>& rhs, float eps) const;
-    __host__ __device__ float dot(const Vector<Len>& rhs) const;
-    __host__ __device__ Vector<Len> abs() const;
-    __host__ __device__ Vector<Len> normalized() const;
+    __host__ __device__ inline size_t size() { return Len; }
+    __host__ __device__ inline float length() const;
+    __host__ __device__ inline bool approx_equal(const Vector<Len>& rhs, float eps) const;
+    __host__ __device__ inline float dot(const Vector<Len>& rhs) const;
+    __host__ __device__ inline Vector<Len> abs() const;
+    __host__ __device__ inline Vector<Len> normalized() const;
 };
 
 template <size_t Len>
-__host__ __device__ Vector<Len> zeros();
+__host__ __device__ inline Vector<Len> zeros();
 
 template <size_t Len>
-__host__ __device__ Vector<Len> ones();
+__host__ __device__ inline Vector<Len> ones();
 
-__host__ __device__ Vector3f vec3f(float x, float y, float z);
-__host__ __device__ Vector4f vec4f(float x, float y, float z, float w);
-__host__ __device__ Vector6f vec6f(float a1, float a2, float a3, float a4, float a5, float a6);
+__host__ __device__ inline Vector3f vec3f(float x, float y, float z);
+__host__ __device__ inline Vector4f vec4f(float x, float y, float z, float w);
+__host__ __device__ inline Vector6f vec6f(float a1, float a2, float a3, float a4, float a5, float a6);
 
-__host__ __device__ State state(float a1, float a2, float a3, float a4, float a5, float a6);
-__host__ __device__ Point point(float x, float y, float z, float roll, float pitch, float yaw);
-__host__ __device__ Point3 point(float x, float y, float z);
+__host__ __device__ inline State state(float a1, float a2, float a3, float a4, float a5, float a6);
+__host__ __device__ inline Point point(float x, float y, float z, float roll, float pitch, float yaw);
+__host__ __device__ inline Point3 point(float x, float y, float z);
 
-__host__ __device__ Vector3f get_rpy(const Point& p);
-__host__ __device__ Point3 get_coords(const Point& p);
+__host__ __device__ inline Vector3f get_rpy(const Point& p);
+__host__ __device__ inline Point3 get_coords(const Point& p);
 
-__host__ __device__ Vector3f cross(const Vector3f& lhs, const Vector3f& rhs);
-
-template <size_t Len>
-__host__ __device__ float angle(const Vector<Len>& lhs, const Vector<Len>& rhs);
-
-__host__ __device__ float deg_to_rad(float deg);
-__host__ __device__ float rad_to_deg(float rad);
+__host__ __device__ inline Vector3f cross(const Vector3f& lhs, const Vector3f& rhs);
 
 template <size_t Len>
-__host__ __device__ Vector<Len> deg_to_rad(const Vector<Len>& rhs);
+__host__ __device__ inline float angle(const Vector<Len>& lhs, const Vector<Len>& rhs);
+
+__host__ __device__ inline float deg_to_rad(float deg);
+__host__ __device__ inline float rad_to_deg(float rad);
 
 template <size_t Len>
-__host__ __device__ Vector<Len> rad_to_deg(const Vector<Len>& rhs);
+__host__ __device__ inline Vector<Len> deg_to_rad(const Vector<Len>& rhs);
 
 template <size_t Len>
-__host__ __device__ Vector<Len> operator*(const float& lhs, const Vector<Len>& rhs);
+__host__ __device__ inline Vector<Len> rad_to_deg(const Vector<Len>& rhs);
 
 template <size_t Len>
-__host__ __device__ Vector<Len + 1> cat(const Vector<Len>& lhs, float rhs);
+__host__ __device__ inline Vector<Len> operator*(const float& lhs, const Vector<Len>& rhs);
 
 template <size_t Len>
-__host__ __device__ Vector<Len + 1> cat(float lhs, const Vector<Len>& rhs);
+__host__ __device__ inline Vector<Len + 1> cat(const Vector<Len>& lhs, float rhs);
+
+template <size_t Len>
+__host__ __device__ inline Vector<Len + 1> cat(float lhs, const Vector<Len>& rhs);
 
 template <size_t Len1, size_t Len2>
-__host__ __device__ Vector<Len1 + Len2> cat(const Vector<Len1>& rhs, const Vector<Len2>& lhs);
+__host__ __device__ inline Vector<Len1 + Len2> cat(const Vector<Len1>& rhs, const Vector<Len2>& lhs);
 
 template <size_t Len>
-__host__ __device__ void printVec(const Vector<Len>& vec, const char* fmt = "%f ");
+__host__ __device__ inline void printVec(const Vector<Len>& vec, const char* fmt = "%f ");
 
 template <size_t Len>
-__host__ std::ostream& operator<<(std::ostream&, const Vector<Len>& vec);
+__host__ inline std::ostream& operator<<(std::ostream&, const Vector<Len>& vec);
 
 
 // ================================================================================= //
@@ -121,51 +131,69 @@ template <size_t Rows, size_t Cols>
 struct Matrix
 {
     float data[Rows * Cols];
-    __host__ __device__ Matrix() {};
-    __host__ __device__ explicit Matrix(float val);
+    __host__ __device__ inline Matrix() {};
+    __host__ __device__ inline explicit Matrix(float val);
+    __host__ __device__ inline explicit Matrix(float* val);
 
-    __host__ __device__ size_t rows() { return Rows; }
-    __host__ __device__ size_t cols() { return Cols; }
+    __host__ __device__ inline size_t rows() { return Rows; }
+    __host__ __device__ inline size_t cols() { return Cols; }
 
-    __host__ __device__ Matrix<Rows, Cols>& operator=(const Matrix<Rows, Cols>& rhs);
+    __host__ __device__ inline Matrix<Rows, Cols>& operator=(const Matrix<Rows, Cols>& rhs);
 
-    __host__ __device__ void set_row(size_t i, const Vector<Cols>& row);
-    __host__ __device__ void set_col(size_t j, const Vector<Rows>& col);
+    __host__ __device__ inline void set_row(size_t i, const Vector<Cols> &row);
+    __host__ __device__ inline void set_col(size_t j, const Vector<Rows>& col);
 
-    __host__ __device__ Vector<Cols> get_row(size_t i) const;
-    __host__ __device__ Vector<Rows> get_col(size_t j) const;
+    __host__ __device__ inline Vector<Cols> get_row(size_t i) const;
+    __host__ __device__ inline Vector<Rows> get_col(size_t j) const;
 
-    __host__ __device__ void swap(size_t i1, size_t j1, size_t i2, size_t j2);    
-    __host__ __device__ Matrix<Cols, Rows> transpose() const;
+    __host__ __device__ inline void swap(size_t i1, size_t j1, size_t i2, size_t j2);    
+    __host__ __device__ inline Matrix<Cols, Rows> transpose() const;
+
+    __host__ __device__ inline float trace() const;
 };
 
-template <size_t Rows, size_t Cols>
-__host__ __device__ Matrix<Rows, Cols> m_zeros();
+template <size_t N, size_t M, size_t L>
+__host__ __device__ inline Matrix<N, L> operator*(const Matrix<N, M>& lhs, const Matrix<M, L> &rhs);
 
 template <size_t Rows, size_t Cols>
-__host__ __device__ Matrix<Rows, Cols> m_ones();
-
-template <size_t Rows, size_t Cols>
-__host__ __device__ Matrix<Rows, Cols> identity();
-
-__host__ __device__ Matrix3f mat3f_rows(Vector3f r1, Vector3f r2, Vector3f r3);
-__host__ __device__ Matrix3f mat3f_cols(Vector3f c1, Vector3f c2, Vector3f c3);
-__host__ __device__ Matrix4f mat4f_rows(Vector4f r1, Vector4f r2, Vector4f r3, Vector4f r4);
-__host__ __device__ Matrix4f mat4f_cols(Vector4f c1, Vector4f c2, Vector4f c3, Vector4f c4);
-__host__ __device__ Matrix3f mat3f(float a00, float a01, float a02, float a10, float a11, float a12, float a20, float a21, float a22);
-__host__ __device__ Matrix<3, 4> mat3x4_rows(Vector4f r1, Vector4f r2, Vector4f r3);
-__host__ __device__ Matrix<4, 3> mat4x3_rows(Vector3f r1, Vector3f r2, Vector3f r3, Vector3f r4);
-__host__ __device__ Matrix4f affine(const Matrix3f& rot, const Vector3f& trans);
-__host__ __device__ Matrix3f rotation(const Matrix4f& affine);
-__host__ __device__ Vector3f translation(const Matrix4f& affine);
+__host__ __device__ inline Vector<Rows> operator*(const Matrix<Rows, Cols>& lhs, const Vector<Cols>& rhs);
 
 
 template <size_t Rows, size_t Cols>
-__host__ __device__ void printMat(const Matrix<Rows, Cols>& mat, const char* fmt = "%f ");
+__host__ __device__ inline Matrix<Rows, Cols> m_zeros();
 
 template <size_t Rows, size_t Cols>
-__host__ __device__ std::ostream& operator<<(std::ostream& os, const Matrix<Rows, Cols>& mat);
+__host__ __device__ inline Matrix<Rows, Cols> m_ones();
 
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline Matrix<Rows, Cols> identity();
+
+__host__ __device__ inline Matrix3f mat3f_rows(Vector3f r1, Vector3f r2, Vector3f r3);
+__host__ __device__ inline Matrix3f mat3f_cols(Vector3f c1, Vector3f c2, Vector3f c3);
+__host__ __device__ inline Matrix4f mat4f_rows(Vector4f r1, Vector4f r2, Vector4f r3, Vector4f r4);
+__host__ __device__ inline Matrix4f mat4f_cols(Vector4f c1, Vector4f c2, Vector4f c3, Vector4f c4);
+__host__ __device__ inline Matrix3f mat3f(float a00, float a01, float a02, float a10, float a11, float a12, float a20, float a21, float a22);
+__host__ __device__ inline Matrix<3, 4> mat3x4_rows(Vector4f r1, Vector4f r2, Vector4f r3);
+__host__ __device__ inline Matrix<4, 3> mat4x3_rows(Vector3f r1, Vector3f r2, Vector3f r3, Vector3f r4);
+__host__ __device__ inline Matrix4f affine(const Matrix3f& rot, const Vector3f& trans);
+__host__ __device__ inline Matrix3f rotation(const Matrix4f& affine);
+__host__ __device__ inline Vector3f translation(const Matrix4f& affine);
+
+__host__ __device__ inline Matrix3f from_roll(float a);
+__host__ __device__ inline Matrix3f from_pitch(float a);
+__host__ __device__ inline Matrix3f from_yaw(float a);
+__host__ __device__ inline Matrix3f fromRPY(float r, float p, float y);
+__host__ __device__ inline Matrix3f fromRPY(Vector3f rpy);
+__host__ __device__ inline Matrix3f fromYPR(float y, float p, float r);
+__host__ __device__ inline Matrix3f fromYPR(Vector3f ypr);
+
+__host__ __device__ inline Vector3f toRPY(const Matrix3f& rot, unsigned int solution_number = 1);
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline void printMat(const Matrix<Rows, Cols>& mat, const char* fmt = "%f ");
+
+template <size_t Rows, size_t Cols>
+__host__ inline std::ostream& operator<<(std::ostream& os, const Matrix<Rows, Cols>& mat);
 
 
 
@@ -177,7 +205,7 @@ __host__ __device__ std::ostream& operator<<(std::ostream& os, const Matrix<Rows
 // ================================================================================= //
 
 template <size_t Len> 
-__host__ __device__
+__host__ __device__ inline
 Vector<Len>::Vector(float val)
 {
     for (size_t i = 0; i < Len; ++i) 
@@ -185,7 +213,7 @@ Vector<Len>::Vector(float val)
 }
 
 template <size_t Len> 
-__host__ __device__
+__host__ __device__ inline
 Vector<Len>& Vector<Len>::operator=(const Vector<Len>& rhs)
 {
     for (size_t i = 0; i < Len; ++i)
@@ -194,7 +222,7 @@ Vector<Len>& Vector<Len>::operator=(const Vector<Len>& rhs)
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 Vector<Len> Vector<Len>::operator+(const Vector<Len>& rhs) const
 {
     Vector<Len> res;
@@ -204,7 +232,7 @@ Vector<Len> Vector<Len>::operator+(const Vector<Len>& rhs) const
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 Vector<Len> Vector<Len>::operator-(const Vector<Len>& rhs) const
 {
     Vector<Len> res;
@@ -214,7 +242,7 @@ Vector<Len> Vector<Len>::operator-(const Vector<Len>& rhs) const
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 Vector<Len> Vector<Len>::operator*(float rhs) const
 {
     Vector<Len> res;
@@ -224,7 +252,7 @@ Vector<Len> Vector<Len>::operator*(float rhs) const
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 Vector<Len> Vector<Len>::operator/(float rhs) const
 {
     Vector<Len> res;
@@ -234,7 +262,7 @@ Vector<Len> Vector<Len>::operator/(float rhs) const
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 void printVec(const Vector<Len>& vec, const char* fmt)
 {
     for (size_t i = 0; i < Len; ++i)
@@ -243,17 +271,17 @@ void printVec(const Vector<Len>& vec, const char* fmt)
 }
 
 template <size_t Len>
-__host__ 
+__host__ inline
 std::ostream& operator<<(std::ostream& os, const Vector<Len>& vec)
 {
     for (size_t i = 0; i < Len; ++i)
-        os << vec[i] << " ";
+        os << vec.data[i] << " ";
     os << "\n";
     return os;
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 bool Vector<Len>::operator==(const Vector<Len>& rhs) const
 {
     for (size_t i = 0; i < Len; ++i)
@@ -267,14 +295,14 @@ bool Vector<Len>::operator==(const Vector<Len>& rhs) const
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 bool Vector<Len>::operator!=(const Vector<Len>& rhs) const
 {
     return !(*this == rhs);
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 bool Vector<Len>::approx_equal(const Vector<Len>& rhs, float eps) const
 {
     for (size_t i = 0; i < Len; ++i)
@@ -288,7 +316,7 @@ bool Vector<Len>::approx_equal(const Vector<Len>& rhs, float eps) const
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 float Vector<Len>::dot(const Vector<Len>& rhs) const 
 {
     float sum = 0;
@@ -300,7 +328,7 @@ float Vector<Len>::dot(const Vector<Len>& rhs) const
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 Vector<Len> Vector<Len>::abs() const 
 {
     Vector<Len> res;
@@ -312,14 +340,14 @@ Vector<Len> Vector<Len>::abs() const
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 Vector<Len> Vector<Len>::normalized() const 
 {
     return *this / length();
 }
 
 template <size_t Len>
-__host__ __device__
+__host__ __device__ inline
 float Vector<Len>::length() const 
 {
     float acc = 0.f;
@@ -330,7 +358,7 @@ float Vector<Len>::length() const
     return sqrt(acc); 
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Vector3f cross(const Vector3f& lhs, const Vector3f& rhs)
 {
     Vector3f res;
@@ -340,7 +368,7 @@ Vector3f cross(const Vector3f& lhs, const Vector3f& rhs)
     return res;
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Vector3f vec3f(float x, float y, float z)
 {
     Vector3f res;
@@ -350,7 +378,7 @@ Vector3f vec3f(float x, float y, float z)
     return res;
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Vector4f vec4f(float x, float y, float z, float w)
 {
     Vector4f res;
@@ -361,7 +389,7 @@ Vector4f vec4f(float x, float y, float z, float w)
     return res;
 
 }
-__host__ __device__ 
+__host__ __device__ inline 
 Vector6f vec6f(float a1, float a2, float a3, float a4, float a5, float a6)
 {
     Vector6f res;
@@ -374,52 +402,52 @@ Vector6f vec6f(float a1, float a2, float a3, float a4, float a5, float a6)
     return res;
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 State state(float a1, float a2, float a3, float a4, float a5, float a6)
 {
     return vec6f(a1, a2, a3, a4, a5, a6);
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Point point(float x, float y, float z, float roll, float pitch, float yaw)
 {
     return vec6f(x, y, z, roll, pitch, yaw);
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Point3 point(float x, float y, float z)
 {
     return vec3f(x, y, z);
 }
 
 template <size_t Len>
-__host__ __device__ 
+__host__ __device__ inline 
 Vector<Len> zeros()
 {
     return Vector<Len>(0.f);
 }
 
 template <size_t Len>
-__host__ __device__ 
+__host__ __device__ inline 
 Vector<Len> ones()
 {
     return Vector<Len>(1.f);
 }
 
-__host__ __device__
+__host__ __device__ inline
 Vector3f get_rpy(const Point& p)
 {
     return vec3f(p.data[3], p.data[4], p.data[5]);
 }
 
-__host__ __device__
+__host__ __device__ inline
 Point3 get_coords(const Point& p)
 {
     return point(p.data[0], p.data[1], p.data[2]);
 }
 
 template <size_t Len>
-__host__ __device__ float angle(const Vector<Len>& lhs, const Vector<Len>& rhs)
+__host__ __device__ inline float angle(const Vector<Len>& lhs, const Vector<Len>& rhs)
 {
     float dp = lhs.dot(rhs);
     dp /= lhs.length();
@@ -427,20 +455,20 @@ __host__ __device__ float angle(const Vector<Len>& lhs, const Vector<Len>& rhs)
     return acos(dp);
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 float deg_to_rad(float deg)
 {
     return deg * (M_PI / 180.f);
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 float rad_to_deg(float rad)
 {
     return rad * (180.f / M_PI);
 }
 
 template <size_t Len>
-__host__ __device__ 
+__host__ __device__ inline 
 Vector<Len> deg_to_rad(const Vector<Len>& rhs)
 {
     Vector<Len> res;
@@ -452,7 +480,7 @@ Vector<Len> deg_to_rad(const Vector<Len>& rhs)
 }
 
 template <size_t Len>
-__host__ __device__ 
+__host__ __device__ inline 
 Vector<Len> rad_to_deg(const Vector<Len>& rhs)
 {
     Vector<Len> res;
@@ -464,14 +492,14 @@ Vector<Len> rad_to_deg(const Vector<Len>& rhs)
 }
 
 template <size_t Len>
-__host__ __device__ 
+__host__ __device__ inline 
 Vector<Len> operator*(const float& lhs, const Vector<Len>& rhs)
 {
     return rhs * lhs;
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__ 
+__host__ __device__ inline 
 void printMat(const Matrix<Rows, Cols>& mat, const char* fmt)
 {
     for (size_t i = 0; i < Rows; ++i)
@@ -485,7 +513,7 @@ void printMat(const Matrix<Rows, Cols>& mat, const char* fmt)
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__ 
+__host__ inline 
 std::ostream& operator<<(std::ostream& os, const Matrix<Rows, Cols>& mat)
 {
     for (size_t i = 0; i < Rows; ++i)
@@ -500,7 +528,7 @@ std::ostream& operator<<(std::ostream& os, const Matrix<Rows, Cols>& mat)
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__
+__host__ __device__ inline
 void Matrix<Rows, Cols>::swap(size_t i1, size_t j1, size_t i2, size_t j2)
 {
     float tmp = data[i1 * Cols + j1];
@@ -509,7 +537,7 @@ void Matrix<Rows, Cols>::swap(size_t i1, size_t j1, size_t i2, size_t j2)
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__
+__host__ __device__ inline
 Matrix<Rows, Cols>& Matrix<Rows, Cols>::operator=(const Matrix<Rows, Cols>& rhs)
 {
     for (size_t i = 0; i < Rows; ++i)
@@ -523,7 +551,7 @@ Matrix<Rows, Cols>& Matrix<Rows, Cols>::operator=(const Matrix<Rows, Cols>& rhs)
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__
+__host__ __device__ inline
 Matrix<Cols, Rows> Matrix<Rows, Cols>::transpose() const
 {
     Matrix<Cols, Rows> tps;
@@ -537,7 +565,7 @@ Matrix<Cols, Rows> Matrix<Rows, Cols>::transpose() const
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__
+__host__ __device__ inline
 Matrix<Rows, Cols>::Matrix(float val)
 {
     for (size_t i = 0; i < Rows; ++i)
@@ -550,7 +578,7 @@ Matrix<Rows, Cols>::Matrix(float val)
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__
+__host__ __device__ inline
 void Matrix<Rows, Cols>::set_row(size_t i, const Vector<Cols>& row)
 {
     for (size_t j = 0; j < Cols; ++j)
@@ -560,7 +588,7 @@ void Matrix<Rows, Cols>::set_row(size_t i, const Vector<Cols>& row)
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__
+__host__ __device__ inline
 void Matrix<Rows, Cols>::set_col(size_t j, const Vector<Rows>& col)
 {
     for (size_t i = 0; i < Rows; ++i)
@@ -570,7 +598,7 @@ void Matrix<Rows, Cols>::set_col(size_t j, const Vector<Rows>& col)
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__
+__host__ __device__ inline
 Vector<Cols> Matrix<Rows, Cols>::get_row(size_t i) const 
 {
     Vector<Cols> v;
@@ -582,7 +610,7 @@ Vector<Cols> Matrix<Rows, Cols>::get_row(size_t i) const
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__
+__host__ __device__ inline
 Vector<Rows> Matrix<Rows, Cols>::get_col(size_t j) const 
 {
     Vector<Rows> v;
@@ -594,7 +622,7 @@ Vector<Rows> Matrix<Rows, Cols>::get_col(size_t j) const
 }
 
 template <size_t Len>
-__host__ __device__ 
+__host__ __device__ inline 
 Vector<Len + 1> cat(const Vector<Len>& lhs, float rhs)
 {
     Vector<Len + 1> v;
@@ -607,7 +635,7 @@ Vector<Len + 1> cat(const Vector<Len>& lhs, float rhs)
 }
 
 template <size_t Len>
-__host__ __device__ 
+__host__ __device__ inline 
 Vector<Len + 1> cat(float lhs, const Vector<Len>& rhs)
 {
     Vector<Len + 1> v;
@@ -620,7 +648,7 @@ Vector<Len + 1> cat(float lhs, const Vector<Len>& rhs)
 }
 
 template <size_t Len1, size_t Len2>
-__host__ __device__ 
+__host__ __device__ inline 
 Vector<Len1 + Len2> cat(const Vector<Len1>& rhs, const Vector<Len2>& lhs)
 {
     Vector<Len1 + Len2> v;
@@ -635,7 +663,7 @@ Vector<Len1 + Len2> cat(const Vector<Len1>& rhs, const Vector<Len2>& lhs)
     return v;
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix3f rotation(const Matrix4f& affine)
 {
     Vector4f r1 = affine.get_row(0);
@@ -648,7 +676,7 @@ Matrix3f rotation(const Matrix4f& affine)
     );
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Vector3f translation(const Matrix4f& affine)
 {
     Vector4f r1 = affine.get_row(0);
@@ -657,8 +685,8 @@ Vector3f translation(const Matrix4f& affine)
     return vec3f(r1.data[3], r2.data[3], r3.data[3]);
 }
 
-__host__ __device__ 
-Matrix4f affine(Matrix3f rot, Vector3f trans)
+__host__ __device__ inline 
+Matrix4f affine(const Matrix3f& rot, const Vector3f& trans)
 {
     Vector4f r1 = cat(rot.get_row(0), trans.data[0]);
     Vector4f r2 = cat(rot.get_row(1), trans.data[1]);
@@ -667,7 +695,7 @@ Matrix4f affine(Matrix3f rot, Vector3f trans)
     return mat4f_rows(r1, r2, r3, r4);
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix3f mat3f_rows(Vector3f r1, Vector3f r2, Vector3f r3)
 {
     Matrix3f m;
@@ -677,7 +705,7 @@ Matrix3f mat3f_rows(Vector3f r1, Vector3f r2, Vector3f r3)
     return m;
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix3f mat3f_cols(Vector3f c1, Vector3f c2, Vector3f c3)
 {
     Matrix3f m;
@@ -687,7 +715,7 @@ Matrix3f mat3f_cols(Vector3f c1, Vector3f c2, Vector3f c3)
     return m;
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix4f mat4f_rows(Vector4f r1, Vector4f r2, Vector4f r3, Vector4f r4)
 {
     Matrix4f m;
@@ -699,7 +727,7 @@ Matrix4f mat4f_rows(Vector4f r1, Vector4f r2, Vector4f r3, Vector4f r4)
 
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix4f mat4f_cols(Vector4f c1, Vector4f c2, Vector4f c3, Vector4f c4)
 {
     Matrix4f m;
@@ -710,28 +738,28 @@ Matrix4f mat4f_cols(Vector4f c1, Vector4f c2, Vector4f c3, Vector4f c4)
     return m;
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix3f mat3f(float a00, float a01, float a02, float a10, float a11, float a12, float a20, float a21, float a22)
 {
     return mat3f_rows(vec3f(a00, a01, a02), vec3f(a10, a11, a12), vec3f(a20, a21, a22));
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix<Rows, Cols> m_zeros()
 {
     return Matrix<Rows, Cols>(0.f);
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix<Rows, Cols> m_ones()
 {
     return Matrix<Rows, Cols>(1.f);
 }
 
 template <size_t Rows, size_t Cols>
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix<Rows, Cols> identity()
 {
     Matrix<Rows, Cols> m = m_zeros<Rows, Cols>();
@@ -743,7 +771,7 @@ Matrix<Rows, Cols> identity()
     return m;
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix<4, 3> mat4x3_rows(Vector3f r1, Vector3f r2, Vector3f r3, Vector3f r4)
 {
     Matrix<4, 3> mat;
@@ -754,7 +782,7 @@ Matrix<4, 3> mat4x3_rows(Vector3f r1, Vector3f r2, Vector3f r3, Vector3f r4)
     return mat;
 }
 
-__host__ __device__ 
+__host__ __device__ inline 
 Matrix<3, 4> mat3x4_rows(Vector4f r1, Vector4f r2, Vector4f r3)
 {
     Matrix<3, 4> mat;
@@ -764,7 +792,191 @@ Matrix<3, 4> mat3x4_rows(Vector4f r1, Vector4f r2, Vector4f r3)
     return mat;
 }
 
+template<size_t Len>
+__host__ __device__ inline 
+Vector<Len>::Vector(float* val)
+{
+    for (size_t i = 0; i < Len; ++i)
+    {
+        data[i] = val[i];
+    }
+}
 
-} // namespace
+template<size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Matrix<Rows, Cols>::Matrix(float* val)
+{
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        data[i] = val[i];
+    }
+}
+
+template <size_t N, size_t M, size_t L>
+__host__ __device__ inline 
+Matrix<N, L> operator*(const Matrix<N, M>& lhs, const Matrix<M, L> &rhs)
+{
+    Matrix<N, L> res;
+    for (size_t i = 0; i < N; ++i)
+    {
+        for (size_t j = 0; j < L; ++j)
+        {
+            for (size_t k = 0; k < M; ++k)
+            {
+                res.data[i * L + j] += lhs.data[i * M + k] * rhs.data[k * L + j];
+            }
+        }
+    }
+    return res;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Vector<Rows> operator*(const Matrix<Rows, Cols>& lhs, const Vector<Cols>& rhs)
+{
+    Vector<Rows> res;
+    for (size_t i = 0; i < Rows; ++i)
+    {
+        res.data[i] = lhs.get_row(i).dot(rhs);
+    }
+    return res;
+}
+
+__host__ __device__ inline 
+Matrix3f from_roll(float a)
+{
+    return mat3f(
+        1, 0, 0,
+        0, cos(a), -sin(a),
+        0, sin(a), cos(a));
+}
+
+__host__ __device__ inline 
+Matrix3f from_pitch(float a)
+{
+    return mat3f(
+        cos(a), 0, sin(a),
+        0, 1, 0,
+        -sin(a), 0, cos(a));
+}
+
+__host__ __device__ inline 
+Matrix3f from_yaw(float a)
+{
+    return mat3f(
+        cos(a), -sin(a), 0,
+        sin(a), cos(a), 0,
+        0, 0, 1
+    );
+}
+
+__host__ __device__ inline 
+Matrix3f fromRPY(float r, float p, float y)
+{
+    return from_yaw(y) * from_pitch(p) * from_roll(r);
+}
+
+__host__ __device__ inline 
+Matrix3f fromRPY(Vector3f rpy)
+{
+    return fromRPY(rpy.data[0], rpy.data[1], rpy.data[2]);
+}
+
+__host__ __device__ inline 
+Matrix3f fromYPR(float y, float p, float r)
+{
+    return from_roll(r) * from_pitch(p) * from_yaw(y);
+}
+
+__host__ __device__ inline 
+Matrix3f fromYPR(Vector3f ypr)
+{
+    return fromYPR(ypr.data[0], ypr.data[1], ypr.data[2]);
+}
+
+__host__ __device__ inline
+void coeffs_vec3f(const Vector3f& vec, float& x, float& y, float& z)
+{
+    x = vec.data[0];
+    y = vec.data[1];
+    z = vec.data[2];
+}
+
+__host__ __device__ inline
+void coeffs_mat3f(const Matrix3f& mat, float& a11, float& a12, float& a13, float& a21, float& a22, float& a23, float& a31, float& a32, float& a33)
+{
+    coeffs_vec3f(mat.get_row(0), a11, a12, a13);
+    coeffs_vec3f(mat.get_row(1), a21, a22, a23);
+    coeffs_vec3f(mat.get_row(3), a31, a32, a33);
+}
+
+
+// from https://github.com/fzi-forschungszentrum-informatik/gpu-voxels/blob/master/packages/gpu_voxels/src/gpu_voxels/helpers/cuda_matrices.h
+__host__ __device__ inline 
+Vector3f toRPY(const Matrix3f& rot, unsigned int solution_number)
+{
+    float x1, y1, z1;
+    float x2, y2, z2;
+
+    float a11, a12, a13;
+    float a21, a22, a23;
+    float a31, a32, a33;
+
+    coeffs_mat3f(rot, a11, a12, a13, a21, a22, a23, a31, a32, a33);
+
+    // Check that pitch is not at a singularity
+    if (1.0 - fabs(a31) < 0.00001)
+    {
+        z1 = 0;
+        z2 = 0;
+
+        // From difference of angles formula
+        if (a31 < 0) //gimbal locked down
+        {
+            float delta = atan2(a12, a13);
+            y1 = M_PI_2;
+            y2 = M_PI_2;
+            x1 = delta;
+            x2 = delta;
+        }
+        else // gimbal locked up
+        {
+            float delta = atan2(-a12, -a13);
+            y1 = -M_PI_2;
+            y2 = -M_PI_2;
+            x1 = delta;
+            x2 = delta;
+        }
+    }
+    else
+    {
+        y1 = -asin(a31);
+        y2 = M_PI - y1;
+
+        x1 = atan2(a32 / cos(y1), a33 / cos(y1));
+        x2 = atan2(a32 / cos(y2), a33 / cos(y2));
+
+        z1 = atan2(a21 / cos(y1), a11 / cos(y1));
+        z2 = atan2(a21 / cos(y2), a11 / cos(y2));
+    }
+
+    return (solution_number == 1) ? vec3f(x1, y1, z1) : vec3f(x2, y2, z2);
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+float Matrix<Rows, Cols>::trace() const
+{
+    size_t n = Rows < Cols ? Rows : Cols;
+    float sum = 0.f;
+    for (size_t i = 0; i < n; ++i)
+    {
+        sum += data[i * Cols + i];
+    }
+    return sum;
+}
+
+} // namespace mt
+
 
 #endif
