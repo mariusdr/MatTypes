@@ -4,83 +4,161 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+#include "Types.hpp"
+
+#ifndef __host__
+#define __host__
+#endif
+
+#ifndef __device__
+#define __device__
+#endif
+
+
 namespace ur_kin {
 
 #define ZERO_THRESH 0.00000001
 #define SIGN(x) ( ( (x) > 0 ) - ( (x) < 0 ) )
 #define PI M_PI
 
-#ifndef UR5_PARAMS
-#define UR5_PARAMS
-#endif
 
-#ifdef UR10_PARAMS
-#define d1  0.1273
-#define a2 -0.612
-#define a3 -0.5723
-#define d4  0.163941
-#define d5  0.1157
-#define d6  0.0922
-#define ur_len
-#endif
+struct DHParams
+{
+  const float d1; const float a2; const float a3;
+  const float d4; const float d5; const float d6;
+};
 
-#ifdef UR5_PARAMS
-#define d1  0.089159
-#define a2 -0.42500
-#define a3 -0.39225
-#define d4  0.10915
-#define d5  0.09465
-#define d6  0.0823
-#endif
+const DHParams UR_10_DH
+{
+  d1 : 0.1273, a2 : -0.612, a3 : -0.5723,
+  d4 : 0.163941, d5 : 0.1157, d6 : 0.0922,
+};
 
-#ifdef UR3_PARAMS
-#define d1  0.1519
-#define a2 -0.24365
-#define a3 -0.21325
-#define d4  0.11235
-#define d5  0.08535
-#define d6  0.0819
-#endif
+const DHParams UR_5_DH
+{
+  d1 : 0.089159, a2 : -0.42500, a3 : -0.39225,
+  d4 : 0.10915, d5 : 0.09465, d6 : 0.0823,
+};
 
-#ifdef UR10E_PARAMS
-#define d1  0.1807
-#define a2 -0.6127
-#define a3 -0.57155
-#define d4  0.17415
-#define d5  0.11985
-#define d6  0.11655
-#define ur_len
-#endif
+const DHParams UR_3_DH
+{
+  d1 : 0.1519, a2 : -0.24365, a3 : -0.21325,
+  d4 : 0.11235, d5 : 0.08535, d6 : 0.0819,
+};
 
-#ifdef UR5E_PARAMS
-#define d1  0.1625
-#define a2 -0.42500
-#define a3 -0.39220
-#define d4  0.1333
-#define d5  0.09970
-#define d6  0.0996
-#endif
+const DHParams UR_10E_DH
+{
+  d1 : 0.1807, a2 : -0.6127, a3 : -0.57155,
+  d4 : 0.17415, d5 : 0.11985, d6 : 0.11655,
+};
 
-#ifdef UR3E_PARAMS
-#define d1  0.15185
-#define a2 -0.24355
-#define a3 -0.2132
-#define d4  0.13105
-#define d5  0.08535
-#define d6  0.0921
-#endif
+const DHParams UR_5E_DH
+{
+  d1 : 0.1625, a2 : -0.42500, a3 : -0.39220,
+  d4 : 0.1333, d5 : 0.09970, d6 : 0.0996,
+};
 
-#ifdef UR16E_PARAMS
-#define d1  0.1807
-#define a2 -0.4784
-#define a3 -0.36
-#define d4  0.17415
-#define d5  0.11985
-#define d6  0.11655
-#define ur_len
-#endif
+const DHParams UR_3E_DH
+{
+  d1 : 0.15185, a2 : -0.24355, a3 : -0.2132,
+  d4 : 0.13105, d5 : 0.08535, d6 : 0.0921,
+};
 
-__device__ void forward(const float* q, float* T)
+const DHParams UR_16E_DH
+{
+  d1 : 0.1807, a2 : -0.4784, a3 : -0.36,
+  d4 : 0.17415, d5 : 0.11985, d6 : 0.11655,
+};
+
+
+__device__ __host__ inline void forward(const float* q, float* T, const DHParams& dh);
+__device__ __host__ inline void backward(float* T, const float* q, const DHParams& dh);
+
+__device__ __host__ inline void forward_(const float *q, float *T, const DHParams& dh);
+
+
+__device__ __host__ inline mt::Matrix4f solveFK(mt::State state, const DHParams& dh = UR_5_DH)
+{
+  mt::Matrix4f fwd(0.f);
+  forward(state.data, fwd.data, dh);
+  return fwd;
+}
+
+__device__ __host__ inline mt::Matrix4f solveFK_(mt::State state, const DHParams& dh = UR_5_DH)
+{
+  mt::Matrix4f fwd(0.f);
+  forward_(state.data, fwd.data, dh);
+  return fwd;
+}
+
+
+
+__device__ __host__ inline void forward_(const float *q, float *T, const DHParams& dh)
+{
+    const float s1 = sin(q[0]);
+    const float c1 = cos(q[0]);
+    const float s2 = sin(q[1]);
+    const float c2 = cos(q[1]);
+    const float s3 = sin(q[2]);
+    const float c3 = cos(q[2]);
+    const float s5 = sin(q[4]);
+    const float c5 = cos(q[4]);
+    const float s6 = sin(q[5]);
+    const float c6 = cos(q[5]);
+
+    const float q234 = q[1] + q[2] + q[3];
+
+    const float s234 = sin(q234);
+    const float c234 = cos(q234);
+
+    const float d1 = dh.d1;
+    const float a2 = dh.a2;
+    const float a3 = dh.a3;
+    const float d4 = dh.d4;
+    const float d5 = dh.d5;
+    const float d6 = dh.d6;
+
+    T[0] = ((c1 * c234 - s1 * s234) * s5) / 2.0 - c5 * s1 + ((c1 * c234 + s1 * s234) * s5) / 2.0;
+
+    T[1] = (c6 * (s1 * s5 + ((c1 * c234 - s1 * s234) * c5) / 2.0 + ((c1 * c234 + s1 * s234) * c5) / 2.0) -
+            (s6 * ((s1 * c234 + c1 * s234) - (s1 * c234 - c1 * s234))) / 2.0);
+
+    T[2] = (-(c6 * ((s1 * c234 + c1 * s234) - (s1 * c234 - c1 * s234))) / 2.0 -
+            s6 * (s1 * s5 + ((c1 * c234 - s1 * s234) * c5) / 2.0 + ((c1 * c234 + s1 * s234) * c5) / 2.0));
+
+    T[3] = ((d5 * (s1 * c234 - c1 * s234)) / 2.0 - (d5 * (s1 * c234 + c1 * s234)) / 2.0 -
+            d4 * s1 + (d6 * (c1 * c234 - s1 * s234) * s5) / 2.0 + (d6 * (c1 * c234 + s1 * s234) * s5) / 2.0 -
+            a2 * c1 * c2 - d6 * c5 * s1 - a3 * c1 * c2 * c3 + a3 * c1 * s2 * s3);
+
+    T[4] = c1 * c5 + ((s1 * c234 + c1 * s234) * s5) / 2.0 + ((s1 * c234 - c1 * s234) * s5) / 2.0;
+
+    T[5] = (c6 * (((s1 * c234 + c1 * s234) * c5) / 2.0 - c1 * s5 + ((s1 * c234 - c1 * s234) * c5) / 2.0) +
+            s6 * ((c1 * c234 - s1 * s234) / 2.0 - (c1 * c234 + s1 * s234) / 2.0));
+
+    T[6] = (c6 * ((c1 * c234 - s1 * s234) / 2.0 - (c1 * c234 + s1 * s234) / 2.0) -
+            s6 * (((s1 * c234 + c1 * s234) * c5) / 2.0 - c1 * s5 + ((s1 * c234 - c1 * s234) * c5) / 2.0));
+
+    T[7] = ((d5 * (c1 * c234 - s1 * s234)) / 2.0 - (d5 * (c1 * c234 + s1 * s234)) / 2.0 + d4 * c1 +
+            (d6 * (s1 * c234 + c1 * s234) * s5) / 2.0 + (d6 * (s1 * c234 - c1 * s234) * s5) / 2.0 + d6 * c1 * c5 -
+            a2 * c2 * s1 - a3 * c2 * c3 * s1 + a3 * s1 * s2 * s3);
+
+    T[8] = ((c234 * c5 - s234 * s5) / 2.0 - (c234 * c5 + s234 * s5) / 2.0);
+
+    T[9] = ((s234 * c6 - c234 * s6) / 2.0 - (s234 * c6 + c234 * s6) / 2.0 - s234 * c5 * c6);
+
+    T[10] = (s234 * c5 * s6 - (c234 * c6 + s234 * s6) / 2.0 - (c234 * c6 - s234 * s6) / 2.0);
+
+    T[11] = (d1 + (d6 * (c234 * c5 - s234 * s5)) / 2.0 + a3 * (s2 * c3 + c2 * s3) + a2 * s2 -
+             (d6 * (c234 * c5 + s234 * s5)) / 2.0 - d5 * c234);
+    
+    T[12] = 0.f;
+    T[13] = 0.f;
+    T[14] = 0.f;
+    T[15] = 1.f;
+}
+
+__device__ __host__ inline
+void forward(const float* q, float* T, const DHParams& dh)
 {
     float s1 = sin(*q), c1 = cos(*q); q++;
     float q234 = *q, s2 = sin(*q), c2 = cos(*q); q++;
@@ -89,6 +167,14 @@ __device__ void forward(const float* q, float* T)
     float s5 = sin(*q), c5 = cos(*q); q++;
     float s6 = sin(*q), c6 = cos(*q); 
     float s234 = sin(q234), c234 = cos(q234);
+
+    const float d1 = dh.d1;
+    const float a2 = dh.a2;
+    const float a3 = dh.a3;
+    const float d4 = dh.d4;
+    const float d5 = dh.d5;
+    const float d6 = dh.d6;
+
     *T = ((c1*c234-s1*s234)*s5)/2.0 - c5*s1 + ((c1*c234+s1*s234)*s5)/2.0; T++;
     *T = (c6*(s1*s5 + ((c1*c234-s1*s234)*c5)/2.0 + ((c1*c234+s1*s234)*c5)/2.0) - 
           (s6*((s1*c234+c1*s234) - (s1*c234-c1*s234)))/2.0); T++;
@@ -113,12 +199,20 @@ __device__ void forward(const float* q, float* T)
     *T = 0.0; T++; *T = 0.0; T++; *T = 0.0; T++; *T = 1.0;
 }
 
-__device__ int backward(const float* T, float* q_sols, float q6_des)
+__device__ __host__
+int backward(const float* T, float* q_sols, float q6_des, const DHParams& dh)
 {
     int num_sols = 0;
     float T02 = -*T; T++; float T00 =  *T; T++; float T01 =  *T; T++; float T03 = -*T; T++; 
     float T12 = -*T; T++; float T10 =  *T; T++; float T11 =  *T; T++; float T13 = -*T; T++; 
     float T22 =  *T; T++; float T20 = -*T; T++; float T21 = -*T; T++; float T23 =  *T;
+
+    const float d1 = dh.d1;
+    const float a2 = dh.a2;
+    const float a3 = dh.a3;
+    const float d4 = dh.d4;
+    const float d5 = dh.d5;
+    const float d6 = dh.d6;
 
     ////////////////////////////// shoulder rotate joint (q1) //////////////////////////////
     float q1[2];
@@ -288,6 +382,8 @@ __device__ int backward(const float* T, float* q_sols, float q6_des)
      return num_sols;
    }
 }
+
+
 
 
 }; // namespace ur_kin
