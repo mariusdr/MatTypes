@@ -65,7 +65,7 @@ struct Vector
 
     __host__ __device__ inline size_t size() { return Len; }
     __host__ __device__ inline float length() const;
-    __host__ __device__ inline bool approx_equal(const Vector<Len>& rhs, float eps=0e-6) const;
+    __host__ __device__ inline bool approx_equal(const Vector<Len>& rhs, float eps=0.0001) const;
     __host__ __device__ inline float dot(const Vector<Len>& rhs) const;
     __host__ __device__ inline Vector<Len> abs() const;
     __host__ __device__ inline Vector<Len> normalized() const;
@@ -144,18 +144,30 @@ struct Matrix
     __host__ __device__ inline Vector<Cols> get_row(size_t i) const;
     __host__ __device__ inline Vector<Rows> get_col(size_t j) const;
 
-    __host__ __device__ inline void swap(size_t i1, size_t j1, size_t i2, size_t j2);    
     __host__ __device__ inline Matrix<Cols, Rows> transpose() const;
 
     __host__ __device__ inline float trace() const;
+
+    __host__ __device__ inline bool approx_equal(const Matrix<Rows, Cols>& rhs, float eps=0.0001);
 };
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline Matrix<Rows, Cols> operator*(float lhs, const Matrix<Rows, Cols>& rhs);
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline Matrix<Rows, Cols> operator*(const Matrix<Rows, Cols>& lhs, float rhs);
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline Matrix<Rows, Cols> operator+(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs);
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline Matrix<Rows, Cols> operator-(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs);
 
 template <size_t N, size_t M, size_t L>
 __host__ __device__ inline Matrix<N, L> operator*(const Matrix<N, M>& lhs, const Matrix<M, L> &rhs);
 
 template <size_t Rows, size_t Cols>
 __host__ __device__ inline Vector<Rows> operator*(const Matrix<Rows, Cols>& lhs, const Vector<Cols>& rhs);
-
 
 template <size_t Rows, size_t Cols>
 __host__ __device__ inline Matrix<Rows, Cols> m_zeros();
@@ -192,6 +204,7 @@ __host__ __device__ inline void printMat(const Matrix<Rows, Cols>& mat, const ch
 
 template <size_t Rows, size_t Cols>
 __host__ inline std::ostream& operator<<(std::ostream& os, const Matrix<Rows, Cols>& mat);
+
 
 
 
@@ -285,6 +298,20 @@ bool Vector<Len>::approx_equal(const Vector<Len>& rhs, float eps) const
     for (size_t i = 0; i < Len; ++i)
     {
         if (fabs(data[i] - rhs.data[i]) > eps)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+bool Matrix<Rows, Cols>::approx_equal(const Matrix<Rows, Cols>& rhs, float eps)
+{
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        if (fabs(data[i] - rhs.data[i]) > eps) 
         {
             return false;
         }
@@ -502,15 +529,6 @@ std::ostream& operator<<(std::ostream& os, const Matrix<Rows, Cols>& mat)
         os << "\n";
     }
     return os;
-}
-
-template <size_t Rows, size_t Cols>
-__host__ __device__ inline
-void Matrix<Rows, Cols>::swap(size_t i1, size_t j1, size_t i2, size_t j2)
-{
-    float tmp = data[i1 * Cols + j1];
-    data[i1 * Cols + j1] = data[i2 * Cols + j2];
-    data[i2 * Cols + j2] = tmp;
 }
 
 template <size_t Rows, size_t Cols>
@@ -789,19 +807,24 @@ Matrix<Rows, Cols>::Matrix(float* val)
     }
 }
 
-template <size_t N, size_t M, size_t L>
+template <size_t I, size_t K, size_t J>
 __host__ __device__ inline 
-Matrix<N, L> operator*(const Matrix<N, M>& lhs, const Matrix<M, L> &rhs)
+Matrix<I, J> operator*(const Matrix<I, K>& lhs, const Matrix<K, J> &rhs)
 {
-    Matrix<N, L> res;
-    for (size_t i = 0; i < N; ++i)
+    Matrix<I, J> res;
+
+    for (size_t i = 0; i < J; ++i)
     {
-        for (size_t j = 0; j < L; ++j)
+        for (size_t j = 0; j < J; ++j)
         {
-            for (size_t k = 0; k < M; ++k)
+            float s = 0.f;
+            for (size_t k = 0; k < K; ++k)
             {
-                res.data[i * L + j] += lhs.data[i * M + k] * rhs.data[k * L + j];
+                const float l = lhs.data[i * K + k];
+                const float r = rhs.data[k * J + j];
+                s += l * r;
             }
+            res.data[i * J + j] = s;
         }
     }
     return res;
@@ -895,11 +918,17 @@ Vector3f toRPY(const Matrix3f& rot, unsigned int solution_number)
     float x1, y1, z1;
     float x2, y2, z2;
 
-    float a11, a12, a13;
-    float a21, a22, a23;
-    float a31, a32, a33;
+    const float a11 = rot.data[0 * 3 + 0];
+    const float a12 = rot.data[0 * 3 + 1];
+    const float a13 = rot.data[0 * 3 + 2];
+    
+    const float a21 = rot.data[1 * 3 + 0];
+    const float a22 = rot.data[1 * 3 + 1];
+    const float a23 = rot.data[1 * 3 + 2];
 
-    coeffs_mat3f(rot, a11, a12, a13, a21, a22, a23, a31, a32, a33);
+    const float a31 = rot.data[2 * 3 + 0];
+    const float a32 = rot.data[2 * 3 + 1];
+    const float a33 = rot.data[2 * 3 + 2];
 
     // Check that pitch is not at a singularity
     if (1.0 - fabs(a31) < 0.00001)
@@ -952,6 +981,59 @@ float Matrix<Rows, Cols>::trace() const
     }
     return sum;
 }
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Matrix<Rows, Cols> operator*(float lhs, const Matrix<Rows, Cols>& rhs)
+{
+    Matrix<Rows, Cols> res;
+    size_t n = Rows * Cols;
+    for (size_t i = 0; i < n; ++i)
+    {
+        res.data[i] = lhs * rhs.data[i];
+    }
+    return res;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Matrix<Rows, Cols> operator*(const Matrix<Rows, Cols>& lhs, float rhs)
+{
+    Matrix<Rows, Cols> res;
+    size_t n = Rows * Cols;
+    for (size_t i = 0; i < n; ++i)
+    {
+        res.data[i] = rhs * lhs.data[i];
+    }
+    return res;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Matrix<Rows, Cols> operator+(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs)
+{
+    Matrix<Rows, Cols> res;
+    size_t n = Rows * Cols;
+    for (size_t i = 0; i < n; ++i)
+    {
+        res.data[i] = lhs.data[i] + rhs.data[i];
+    }
+    return res;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Matrix<Rows, Cols> operator-(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs)
+{
+    Matrix<Rows, Cols> res;
+    size_t n = Rows * Cols;
+    for (size_t i = 0; i < n; ++i)
+    {
+        res.data[i] = lhs.data[i] - rhs.data[i];
+    }
+    return res;
+}
+
 
 } // namespace mt
 

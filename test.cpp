@@ -16,7 +16,12 @@ using test_types = ::testing::Types<
     std::integral_constant<std::size_t, 6>,
     std::integral_constant<std::size_t, 7>,
     std::integral_constant<std::size_t, 8>,
-    std::integral_constant<std::size_t, 9>
+    std::integral_constant<std::size_t, 9>,
+    std::integral_constant<std::size_t, 24>,
+    std::integral_constant<std::size_t, 30>,
+    std::integral_constant<std::size_t, 99>
+    // std::integral_constant<std::size_t, 256>,
+    // std::integral_constant<std::size_t, 512>
 >;
 
 
@@ -379,12 +384,385 @@ TEST(Vector3Tester, deg_rad_conversions)
 
 //===================================================================//
 
+class Matrix3Tester : public ::testing::Test {};
+
+TEST(Matrix3Tester, mult)
+{
+    mt::Matrix3f a = mt::mat3f(
+        0.1, 8.2, 7.7,
+        8.5, -1.2, 9.99,
+        0.01, 5.4, 9.2
+    );
+
+    mt::Matrix3f b = mt::mat3f(
+        6.6, -2.11, 0.314,
+        4.2, 13.37, 0.09,
+        8.4, 3.2, 2.2
+    );
+
+    mt::Matrix3f ab = a * b;
+    mt::Matrix3f ba = b * a;
+
+    mt::Matrix3f ab_t = mt::mat3f(
+        99.78, 134.063, 17.7094,
+        134.976, -2.011, 24.539,
+        100.026, 101.6169, 20.72914
+    );
+
+    mt::Matrix3f ba_t = mt::mat3f(
+        -17.27186, 58.3476, 32.6299,
+        114.0659, 18.882, 166.7343,
+        28.062, 76.92, 116.888
+    );
+
+    for (int i = 0; i < 9; ++i)
+    {
+        ASSERT_FLOAT_EQ(ab.data[i], ab_t.data[i]);
+        ASSERT_FLOAT_EQ(ba.data[i], ba_t.data[i]);
+    }
+    
+    EXPECT_TRUE(ab.approx_equal(ab_t));
+    EXPECT_TRUE(ab_t.approx_equal(ab));
+
+    EXPECT_TRUE(ba.approx_equal(ba_t));
+    EXPECT_TRUE(ba_t.approx_equal(ba));
+
+    EXPECT_FALSE(ab.approx_equal(ba));
+    EXPECT_FALSE(ba.approx_equal(ab));
+}
+
+TEST(Matrix3Tester, from_roll)
+{
+    mt::Vector3f x = mt::vec3f(1, 0, 0);
+    mt::Vector3f y = mt::vec3f(0, 1, 0);
+    mt::Vector3f z = mt::vec3f(0, 0, 1);
+
+    float rx = 0.162;
+    mt::Matrix3f rot = mt::from_roll(rx);
+
+    auto xt = rot * x;
+    auto yt = rot * y;
+    auto zt = rot * z;
+
+    // dont transform the rotation axis
+    EXPECT_TRUE(xt.approx_equal(x));
+
+    // transformed axes should still be orthogonal
+    EXPECT_FLOAT_EQ(xt.dot(yt), 0.f);
+    EXPECT_FLOAT_EQ(xt.dot(zt), 0.f);
+    EXPECT_FLOAT_EQ(yt.dot(zt), 0.f);
+
+    // righthanded system should still be righthanded
+    EXPECT_TRUE((mt::cross(xt, yt)).approx_equal(zt));
+    EXPECT_TRUE((mt::cross(yt, zt)).approx_equal(xt));
+    EXPECT_TRUE((mt::cross(zt, xt)).approx_equal(yt));
+
+    // rotations should be self inverse
+    mt::Matrix3f id = mt::identity<3, 3>();
+    EXPECT_TRUE((rot * rot.transpose()).approx_equal(id));
+}
+
+
+TEST(Matrix3Tester, from_pitch)
+{
+    mt::Vector3f x = mt::vec3f(1, 0, 0);
+    mt::Vector3f y = mt::vec3f(0, 1, 0);
+    mt::Vector3f z = mt::vec3f(0, 0, 1);
+
+    float rx = 8.862;
+    mt::Matrix3f rot = mt::from_pitch(rx);
+
+    auto xt = rot * x;
+    auto yt = rot * y;
+    auto zt = rot * z;
+
+    // dont transform the rotation axis
+    EXPECT_TRUE(yt.approx_equal(y));
+
+    // transformed axes should still be orthogonal
+    EXPECT_FLOAT_EQ(xt.dot(yt), 0.f);
+    EXPECT_FLOAT_EQ(xt.dot(zt), 0.f);
+    EXPECT_FLOAT_EQ(yt.dot(zt), 0.f);
+    
+    // righthanded system should still be righthanded
+    EXPECT_TRUE((mt::cross(xt, yt)).approx_equal(zt));
+    EXPECT_TRUE((mt::cross(yt, zt)).approx_equal(xt));
+    EXPECT_TRUE((mt::cross(zt, xt)).approx_equal(yt));
+
+    // rotations should be self inverse
+    mt::Matrix3f id = mt::identity<3, 3>();
+    EXPECT_TRUE((rot * rot.transpose()).approx_equal(id));
+}
+
+TEST(Matrix3Tester, from_yaw)
+{
+    mt::Vector3f x = mt::vec3f(1, 0, 0);
+    mt::Vector3f y = mt::vec3f(0, 1, 0);
+    mt::Vector3f z = mt::vec3f(0, 0, 1);
+
+    float rx = 7.162;
+    mt::Matrix3f rot = mt::from_yaw(rx);
+
+    auto xt = rot * x;
+    auto yt = rot * y;
+    auto zt = rot * z;
+
+    // dont transform the rotation axis
+    EXPECT_TRUE(zt.approx_equal(z));
+
+    // transformed axes should still be orthogonal
+    EXPECT_FLOAT_EQ(xt.dot(yt), 0.f);
+    EXPECT_FLOAT_EQ(xt.dot(zt), 0.f);
+    EXPECT_FLOAT_EQ(yt.dot(zt), 0.f);
+    
+    // righthanded system should still be righthanded
+    EXPECT_TRUE((mt::cross(xt, yt)).approx_equal(zt));
+    EXPECT_TRUE((mt::cross(yt, zt)).approx_equal(xt));
+    EXPECT_TRUE((mt::cross(zt, xt)).approx_equal(yt));
+
+    // rotations should be self inverse
+    mt::Matrix3f id = mt::identity<3, 3>();
+    EXPECT_TRUE((rot * rot.transpose()).approx_equal(id));
+}
+
+TEST(Matrix3Tester, combining_rotations)
+{
+    // rotations around the same axis should add up
+    EXPECT_TRUE(mt::from_roll(0.12).approx_equal(mt::from_roll(0.07) * mt::from_roll(0.05)));
+    EXPECT_TRUE(mt::from_pitch(0.12).approx_equal(mt::from_pitch(0.07) * mt::from_pitch(0.05)));
+    EXPECT_TRUE(mt::from_yaw(0.12).approx_equal(mt::from_yaw(0.07) * mt::from_yaw(0.05)));
+
+    auto a = mt::from_roll(2.31);
+    auto b = mt::from_pitch(3.22);
+    auto c = mt::from_yaw(0.991);
+
+    // rotations should not commute generally
+    EXPECT_FALSE((a * b).approx_equal(b * a));
+    EXPECT_FALSE((a * c).approx_equal(c * a));
+    EXPECT_FALSE((b * c).approx_equal(c * b));
+
+    // rotations should be self inverse
+    mt::Matrix3f id = mt::identity<3, 3>();
+    {
+        auto ab = a * b;
+        auto abt = ab.transpose();
+        auto ba = b * a;
+        auto bat = ba.transpose();
+        auto aba = a * b * a;
+        auto abat = aba.transpose();
+        auto bba = b * b * a;
+        auto bbat = bba.transpose();
+        auto bbc = b * b * c;
+        auto bbct = bbc.transpose();
+        auto ac = a * c;
+        auto act = ac.transpose();
+        EXPECT_TRUE((ab * abt).approx_equal(id));
+        EXPECT_TRUE((ba * bat).approx_equal(id));
+        EXPECT_TRUE((aba * abat).approx_equal(id));
+        EXPECT_TRUE((bba * bbat).approx_equal(id));
+        EXPECT_TRUE((bbc * bbct).approx_equal(id));
+        EXPECT_TRUE((ac * act).approx_equal(id));
+        EXPECT_TRUE((abt * ab).approx_equal(id));
+        EXPECT_TRUE((bat * ba).approx_equal(id));
+        EXPECT_TRUE((abat * aba).approx_equal(id));
+    }
+
+    // test fromRPY and fromYPR
+    auto abc = mt::fromRPY(2.31, 3.22, 0.991);
+    auto cba = mt::fromYPR(0.991, 3.22, 2.31);
+
+    EXPECT_TRUE(abc.approx_equal(c * b * a));
+    EXPECT_TRUE((c * b * a).approx_equal(abc));
+    EXPECT_TRUE(cba.approx_equal(a * b * c));
+    EXPECT_TRUE((a * b * c).approx_equal(cba));
+
+    EXPECT_TRUE((abc * abc.transpose()).approx_equal(id));
+    EXPECT_TRUE((abc.transpose() * abc).approx_equal(id));
+    EXPECT_TRUE((cba * cba.transpose()).approx_equal(id));
+    EXPECT_TRUE((cba.transpose() * cba).approx_equal(id));
+
+    EXPECT_FALSE(abc.approx_equal(cba));
+
+
+    mt::Vector3f x = mt::vec3f(1, 0, 0);
+    mt::Vector3f y = mt::vec3f(0, 1, 0);
+    mt::Vector3f z = mt::vec3f(0, 0, 1);
+
+    {
+        auto xt = abc * x;
+        auto yt = abc * y;
+        auto zt = abc * z;
+
+        // transformed axes should still be orthogonal
+        EXPECT_NEAR(xt.dot(yt), 0.f, 1e-6);
+        EXPECT_NEAR(xt.dot(zt), 0.f, 1e-6);
+        EXPECT_NEAR(yt.dot(zt), 0.f, 1e-6);
+
+        // righthanded system should still be righthanded
+        EXPECT_TRUE((mt::cross(xt, yt)).approx_equal(zt));
+        EXPECT_TRUE((mt::cross(yt, zt)).approx_equal(xt));
+        EXPECT_TRUE((mt::cross(zt, xt)).approx_equal(yt));
+    }
+        
+    {
+        auto xt = cba * x;
+        auto yt = cba * y;
+        auto zt = cba * z;
+
+        // transformed axes should still be orthogonal
+        EXPECT_NEAR(xt.dot(yt), 0.f, 1e-6);
+        EXPECT_NEAR(xt.dot(zt), 0.f, 1e-6);
+        EXPECT_NEAR(yt.dot(zt), 0.f, 1e-6);
+
+        // righthanded system should still be righthanded
+        EXPECT_TRUE((mt::cross(xt, yt)).approx_equal(zt));
+        EXPECT_TRUE((mt::cross(yt, zt)).approx_equal(xt));
+        EXPECT_TRUE((mt::cross(zt, xt)).approx_equal(yt));
+    }
+
+    auto v1 = mt::vec3f(93.11, -17.2, 0.08).normalized();
+    auto v2 = mt::vec3f(-5.5, 2.3, -9.1).normalized();
+
+    // angle between two rotated vectors should not change 
+    {
+        auto v1t = abc * v1;
+        auto v2t = abc * v2;
+        EXPECT_FLOAT_EQ(mt::angle(v1, v2), mt::angle(v1t, v2t));
+    }
+
+    {
+        auto v1t = cba * v1;
+        auto v2t = cba * v2;
+        EXPECT_FLOAT_EQ(mt::angle(v1, v2), mt::angle(v1t, v2t));
+    }
+
+    // length of rotated vector should not change
+    auto v3 = mt::vec3f(9.1, -1.111, 8.888);
+
+    {
+        auto v3t = abc * v3;
+        EXPECT_FLOAT_EQ(v3.length(), v3t.length());
+    }
+    {
+        auto v3t = cba * v3;
+        EXPECT_FLOAT_EQ(v3.length(), v3t.length());
+    }
+}
+
+
+TEST(Matrix3Tester, to_rpy)
+{
+    mt::Matrix3f rot = mt::fromRPY(0.31, 1.42, -0.2);
+    auto rpy = mt::toRPY(rot);
+    mt::Matrix3f rot2 = mt::fromRPY(rpy);
+
+    // rot and rot2 should be equivalent rotations
+    
+    mt::Vector3f x = mt::vec3f(1, 0, 0);
+    mt::Vector3f y = mt::vec3f(0, 1, 0);
+    mt::Vector3f z = mt::vec3f(0, 0, 1);
+
+    EXPECT_TRUE((rot * x).approx_equal(rot2 * x));
+    EXPECT_TRUE((rot * y).approx_equal(rot2 * y));
+    EXPECT_TRUE((rot * z).approx_equal(rot2 * z));
+
+    mt::Vector3f v1 = mt::vec3f(0.31, -9.912, 0.127);
+    mt::Vector3f v2 = mt::vec3f(-2.11, 0.31, 4.20);
+
+    EXPECT_TRUE((rot * v1).approx_equal(rot2 * v1));
+    EXPECT_TRUE((rot * v2).approx_equal(rot2 * v2));
+
+    // one of both solutions of fromRPY should be equal to the original euler angles
+
+    // these angles are non singular, so they should be recovered fine
+    std::vector<mt::Vector3f> tgs =
+    {
+        mt::vec3f(1.42, 0.4, -1.2),
+        mt::vec3f(-1.42, 0.4, -1.2),
+        mt::vec3f(0.21, 0.224, 0.112),
+        mt::vec3f(1.2, 1.4, 1.6),
+        mt::vec3f(0.4, 0.2, 0),
+    };
+    for (auto& t: tgs)
+    {
+        auto s1 = mt::toRPY(mt::fromRPY(t), 0);
+        auto s2 = mt::toRPY(mt::fromRPY(t), 1);
+        const float s1_r = fabs(s1.data[0]-t.data[0]);
+        const float s1_p = fabs(s1.data[1]-t.data[1]);
+        const float s1_y = fabs(s1.data[2]-t.data[2]);
+        const float s2_r = fabs(s2.data[0]-t.data[0]);
+        const float s2_p = fabs(s2.data[1]-t.data[1]);
+        const float s2_y = fabs(s2.data[2]-t.data[2]);
+
+        EXPECT_TRUE(((s1_r < 1e-6) && (s1_p < 1e-6) && (s1_y < 1e-6)) || ((s2_r < 1e-6) && (s2_p < 1e-6) && (s2_y < 1e-6)));
+
+        // both solutions should be equivalent rotations
+        auto m1 = mt::fromRPY(t);
+        auto ms1 = mt::fromRPY(s1);
+        auto ms2 = mt::fromRPY(s2);
+
+        EXPECT_TRUE((m1 * v1).approx_equal(ms1 * v1));
+        EXPECT_TRUE((m1 * v2).approx_equal(ms1 * v2));
+        EXPECT_TRUE((m1 * v1).approx_equal(ms2 * v1));
+        EXPECT_TRUE((m1 * v2).approx_equal(ms2 * v2));
+    }
+
+    // // these angles have a gimbal lock, so we get singular solutions 
+    // std::vector<mt::Vector3f> singular_tgs =
+    // {
+    //     mt::vec3f(M_PI_2, M_PI_2, M_PI_2),
+    //     mt::vec3f(M_PI_2, M_PI_2, M_PI_2),
+    //     mt::vec3f(M_PI_2, M_PI, M_PI_2),
+    //     mt::vec3f(M_PI, M_PI_2, M_PI),
+    //     mt::vec3f(-M_PI, M_PI_2, M_PI),
+    //     mt::vec3f(M_PI, M_PI_2, -M_PI),
+    //     mt::vec3f(M_PI, -M_PI_2, M_PI),
+    // };
+    
+    // for (auto& t: tgs)
+    // {
+    //     auto s1 = mt::toRPY(mt::fromRPY(t), 0);
+    //     auto s2 = mt::toRPY(mt::fromRPY(t), 1);
+    //     EXPECT_FLOAT_EQ(s1.data[2], 0.f);
+    //     EXPECT_FLOAT_EQ(s2.data[2], 0.f);
+    // }
+}
+
+
+//===================================================================//
+
+
 template <typename T>
 class SquareMatrixTester : public ::testing::Test {};
 
 TYPED_TEST_CASE(SquareMatrixTester, test_types);
 
+TYPED_TEST(SquareMatrixTester, identity)
+{
+    static constexpr std::size_t N = TypeParam::value;
 
+    mt::Matrix<N, N> id = mt::identity<N, N>();
+
+    EXPECT_FLOAT_EQ(id.trace(), N);
+    EXPECT_TRUE(id.approx_equal(id.transpose()));
+}
+
+TYPED_TEST(SquareMatrixTester, mat_mult)
+{
+    static constexpr std::size_t N = TypeParam::value;
+
+    mt::Matrix<N, N> a(0.1);
+    mt::Matrix<N, N> b(0.2);
+
+    EXPECT_EQ((a*b).rows(), N);
+    EXPECT_EQ((b*a).rows(), N);
+    EXPECT_EQ((a*b).cols(), N);
+    EXPECT_EQ((b*a).cols(), N);
+
+    mt::Matrix<N, N> id = mt::identity<N, N>();
+    EXPECT_TRUE((a*id).approx_equal(a));
+    EXPECT_TRUE((id*a).approx_equal(a));
+}
 
 //===================================================================//
 
@@ -452,6 +830,32 @@ TYPED_TEST(MatrixTester, cols)
     }
 }
 
+TYPED_TEST(MatrixTester, basic_ops)
+{
+    static constexpr std::size_t Rows = TypeParam::value / 100;
+    static constexpr std::size_t Cols = TypeParam::value % 100;
+
+    mt::Matrix<Rows, Cols> a(0.2f);
+
+    auto b = 13.37 * a;
+    auto c = a * 13.37;
+
+    EXPECT_EQ(c.cols(), Cols);
+    EXPECT_EQ(b.cols(), Cols);
+    EXPECT_EQ(c.rows(), Rows);
+    EXPECT_EQ(b.rows(), Rows);
+    EXPECT_TRUE(b.approx_equal(c));
+    EXPECT_TRUE(c.approx_equal(b));
+    EXPECT_FLOAT_EQ(b.data[0], 0.2f * 13.37);
+    EXPECT_FLOAT_EQ(c.data[0], 0.2f * 13.37);
+    EXPECT_TRUE((a + b).approx_equal(b + a));
+    EXPECT_FALSE((a - b).approx_equal(b - a));
+    EXPECT_TRUE((a - a).approx_equal(mt::m_zeros<Rows, Cols>()));
+
+    EXPECT_TRUE((a + b - b).approx_equal(a));
+    EXPECT_TRUE((a + b - a).approx_equal(b));
+}
+
 TYPED_TEST(MatrixTester, transpose)
 {
     static constexpr std::size_t Rows = TypeParam::value / 100;
@@ -488,7 +892,30 @@ TYPED_TEST(MatrixTester, transpose)
     }
 }
 
+TYPED_TEST(MatrixTester, trace)
+{
+    static constexpr std::size_t Rows = TypeParam::value / 100;
+    static constexpr std::size_t Cols = TypeParam::value % 100;
 
+    mt::Matrix<Rows, Cols> m(12.3);
+    size_t n = std::min(Rows, Cols);
+    EXPECT_FLOAT_EQ(n * 12.3, m.trace());
+
+    mt::Matrix<Rows, Cols> i = mt::identity<Rows, Cols>();
+    EXPECT_FLOAT_EQ(n, i.trace());
+}
+
+TYPED_TEST(MatrixTester, mat_mult)
+{
+    static constexpr std::size_t Rows = TypeParam::value / 100;
+    static constexpr std::size_t Cols = TypeParam::value % 100;
+
+    mt::Matrix<Rows, Cols> a(0.1);
+    mt::Matrix<Cols, Rows> b(0.2);
+
+    EXPECT_EQ((a*b).rows(), Rows);
+    EXPECT_EQ((a*b).cols(), Rows);
+}
 
 
 //===================================================================//
