@@ -62,12 +62,10 @@ struct Vector
     __host__ __device__ inline Vector<Len> operator-(const Vector<Len>& rhs) const;
     __host__ __device__ inline Vector<Len> operator*(float) const;
     __host__ __device__ inline Vector<Len> operator/(float) const;
-    __host__ __device__ inline bool operator==(const Vector<Len>& rhs) const;
-    __host__ __device__ inline bool operator!=(const Vector<Len>& rhs) const;
 
     __host__ __device__ inline size_t size() { return Len; }
     __host__ __device__ inline float length() const;
-    __host__ __device__ inline bool approx_equal(const Vector<Len>& rhs, float eps) const;
+    __host__ __device__ inline bool approx_equal(const Vector<Len>& rhs, float eps=0e-6) const;
     __host__ __device__ inline float dot(const Vector<Len>& rhs) const;
     __host__ __device__ inline Vector<Len> abs() const;
     __host__ __device__ inline Vector<Len> normalized() const;
@@ -278,27 +276,6 @@ std::ostream& operator<<(std::ostream& os, const Vector<Len>& vec)
         os << vec.data[i] << " ";
     os << "\n";
     return os;
-}
-
-template <size_t Len>
-__host__ __device__ inline
-bool Vector<Len>::operator==(const Vector<Len>& rhs) const
-{
-    for (size_t i = 0; i < Len; ++i)
-    {
-        if (this->data[i] != rhs.data[i])
-        {
-            return false;
-        }
-    }
-    return true;
-}
-
-template <size_t Len>
-__host__ __device__ inline
-bool Vector<Len>::operator!=(const Vector<Len>& rhs) const
-{
-    return !(*this == rhs);
 }
 
 template <size_t Len>
@@ -614,7 +591,7 @@ __host__ __device__ inline
 Vector<Rows> Matrix<Rows, Cols>::get_col(size_t j) const 
 {
     Vector<Rows> v;
-    for (size_t i = 0; i < Cols; ++i)
+    for (size_t i = 0; i < Rows; ++i)
     {
         v.data[i] = data[i * Cols + j];
     }
