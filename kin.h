@@ -24,77 +24,170 @@ namespace ur_kin {
 
 struct DHParams
 {
-  const float d1; const float a2; const float a3;
-  const float d4; const float d5; const float d6;
+    const float d1; const float a2; const float a3;
+    const float d4; const float d5; const float d6;
 };
 
-const DHParams UR_10_DH
-{
-  d1 : 0.1273, a2 : -0.612, a3 : -0.5723,
-  d4 : 0.163941, d5 : 0.1157, d6 : 0.0922,
+const DHParams UR_10_DH{
+    d1 : 0.1273,
+    a2 : -0.612,
+    a3 : -0.5723,
+    d4 : 0.163941,
+    d5 : 0.1157,
+    d6 : 0.0922,
 };
 
-const DHParams UR_5_DH
-{
-  d1 : 0.089159, a2 : -0.42500, a3 : -0.39225,
-  d4 : 0.10915, d5 : 0.09465, d6 : 0.0823,
+const DHParams UR_5_DH{
+    d1 : 0.089159,
+    a2 : -0.42500,
+    a3 : -0.39225,
+    d4 : 0.10915,
+    d5 : 0.09465,
+    d6 : 0.0823,
 };
 
-const DHParams UR_3_DH
-{
-  d1 : 0.1519, a2 : -0.24365, a3 : -0.21325,
-  d4 : 0.11235, d5 : 0.08535, d6 : 0.0819,
+const DHParams UR_3_DH{
+    d1 : 0.1519,
+    a2 : -0.24365,
+    a3 : -0.21325,
+    d4 : 0.11235,
+    d5 : 0.08535,
+    d6 : 0.0819,
 };
 
-const DHParams UR_10E_DH
-{
-  d1 : 0.1807, a2 : -0.6127, a3 : -0.57155,
-  d4 : 0.17415, d5 : 0.11985, d6 : 0.11655,
+const DHParams UR_10E_DH{
+    d1 : 0.1807,
+    a2 : -0.6127,
+    a3 : -0.57155,
+    d4 : 0.17415,
+    d5 : 0.11985,
+    d6 : 0.11655,
 };
 
-const DHParams UR_5E_DH
-{
-  d1 : 0.1625, a2 : -0.42500, a3 : -0.39220,
-  d4 : 0.1333, d5 : 0.09970, d6 : 0.0996,
+const DHParams UR_5E_DH{
+    d1 : 0.1625,
+    a2 : -0.42500,
+    a3 : -0.39220,
+    d4 : 0.1333,
+    d5 : 0.09970,
+    d6 : 0.0996,
 };
 
-const DHParams UR_3E_DH
-{
-  d1 : 0.15185, a2 : -0.24355, a3 : -0.2132,
-  d4 : 0.13105, d5 : 0.08535, d6 : 0.0921,
+const DHParams UR_3E_DH{
+    d1 : 0.15185,
+    a2 : -0.24355,
+    a3 : -0.2132,
+    d4 : 0.13105,
+    d5 : 0.08535,
+    d6 : 0.0921,
 };
 
-const DHParams UR_16E_DH
-{
-  d1 : 0.1807, a2 : -0.4784, a3 : -0.36,
-  d4 : 0.17415, d5 : 0.11985, d6 : 0.11655,
+const DHParams UR_16E_DH{
+    d1 : 0.1807,
+    a2 : -0.4784,
+    a3 : -0.36,
+    d4 : 0.17415,
+    d5 : 0.11985,
+    d6 : 0.11655,
 };
-
 
 __device__ __host__ inline void forward(const float* q, float* T, const DHParams& dh);
-__device__ __host__ inline void backward(float* T, const float* q, const DHParams& dh);
+__device__ __host__ inline int backward(float* T, const float* q, const DHParams& dh);
 
 __device__ __host__ inline void forward_(const float *q, float *T, const DHParams& dh);
 
 
-__device__ __host__ inline mt::Matrix4f solveFK(mt::State state, const DHParams& dh = UR_5_DH)
+__device__ __host__ 
+inline mt::Matrix4f solveFK(mt::State state, const DHParams &dh = UR_5_DH)
 {
-  mt::Matrix4f fwd(0.f);
-  forward(state.data, fwd.data, dh);
-  return fwd;
+    mt::Matrix4f fwd(0.f);
+    forward(state.data, fwd.data, dh);
+    return fwd;
 }
 
-__device__ __host__ inline mt::Matrix4f solveFK_(mt::State state, const DHParams& dh = UR_5_DH)
+__device__ __host__ 
+inline mt::Matrix4f solveFK_(mt::State state, const DHParams& dh = UR_5_DH)
 {
-  mt::Matrix4f fwd(0.f);
-  forward_(state.data, fwd.data, dh);
-  return fwd;
+    mt::Matrix4f fwd(0.f);
+    forward_(state.data, fwd.data, dh);
+    return fwd;
 }
+
+// Returns the Denavit Hartenberg transformation between two adjacent joints, 
+// where the transform goes from @param joint to joint+1
+__device__ __host__ inline
+mt::Matrix4f get_dh_transform(size_t joint, const mt::State& state, const DHParams& dh = UR_5_DH)
+{
+    if (joint > 5)
+    {
+        return mt::identity<4, 4>();
+    }
+
+    const float alpha_arr[6] = {M_PI_2, 0.f, 0.f, M_PI_2, -M_PI_2, 0.f};
+    const float d_arr[6] = {dh.d1, 0.f, 0.f, dh.d4, dh.d5, dh.d6};
+    const float a_arr[6] = {0.f, dh.a2, dh.a3, 0.f, 0.f, 0.f};
+
+    const float theta = state.data[joint];
+    const float ct = cos(theta);
+    const float st = sin(theta);
+
+    const float alpha = alpha_arr[joint];
+    const float ca = cos(alpha);
+    const float sa = sin(alpha);
+
+    const float d = d_arr[joint];
+    float a = a_arr[joint];
+
+    mt::Matrix4f rot_z = mt::identity<4, 4>();
+    rot_z.data[0 * 4 + 0] = ct;
+    rot_z.data[1 * 4 + 1] = ct;
+    rot_z.data[0 * 4 + 1] = -st;
+    rot_z.data[1 * 4 + 0] = st;
+
+    mt::Matrix4f trans_z = mt::identity<4, 4>();
+    trans_z.data[2 * 4 + 3] = d;
+
+    mt::Matrix4f trans_x = mt::identity<4, 4>();
+    trans_x.data[0 * 4 + 3] = a;
+
+    mt::Matrix4f rot_x = mt::identity<4, 4>();
+    rot_x.data[1 * 4 + 1] = ca;
+    rot_x.data[2 * 4 + 2] = ca;
+
+    rot_x.data[1 * 4 + 2] = -sa;
+    rot_x.data[2 * 4 + 1] = sa;
+
+    return rot_z * trans_z * trans_x * rot_x;
+}
+
+
+
+__device__ __host__
+void get_posture(mt::State& s)
+{
+
+
+}
+
+
+
+
+
+
+
+
 
 
 
 __device__ __host__ inline void forward_(const float *q, float *T, const DHParams& dh)
 {
+    const float d1 = dh.d1;
+    const float a2 = dh.a2;
+    const float a3 = dh.a3;
+    const float d4 = dh.d4;
+    const float d5 = dh.d5;
+    const float d6 = dh.d6;
+
     const float s1 = sin(q[0]);
     const float c1 = cos(q[0]);
     const float s2 = sin(q[1]);
@@ -105,18 +198,8 @@ __device__ __host__ inline void forward_(const float *q, float *T, const DHParam
     const float c5 = cos(q[4]);
     const float s6 = sin(q[5]);
     const float c6 = cos(q[5]);
-
-    const float q234 = q[1] + q[2] + q[3];
-
-    const float s234 = sin(q234);
-    const float c234 = cos(q234);
-
-    const float d1 = dh.d1;
-    const float a2 = dh.a2;
-    const float a3 = dh.a3;
-    const float d4 = dh.d4;
-    const float d5 = dh.d5;
-    const float d6 = dh.d6;
+    const float s234 = sin(q[1] + q[2] + q[3]);
+    const float c234 = cos(q[1] + q[2] + q[3]);
 
     T[0] = ((c1 * c234 - s1 * s234) * s5) / 2.0 - c5 * s1 + ((c1 * c234 + s1 * s234) * s5) / 2.0;
 
@@ -199,7 +282,7 @@ void forward(const float* q, float* T, const DHParams& dh)
     *T = 0.0; T++; *T = 0.0; T++; *T = 0.0; T++; *T = 1.0;
 }
 
-__device__ __host__
+__device__ __host__ inline
 int backward(const float* T, float* q_sols, float q6_des, const DHParams& dh)
 {
     int num_sols = 0;
@@ -382,7 +465,6 @@ int backward(const float* T, float* q_sols, float q6_des, const DHParams& dh)
      return num_sols;
    }
 }
-
 
 
 
