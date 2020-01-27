@@ -41,7 +41,7 @@ endif()
 
 
 set (SOURCES main.cpp)
-set (TEST_FILES test.cpp)
+set (TEST_FILES test_types.cpp test_kin.cpp)
 
 add_executable(main main.cpp)
 

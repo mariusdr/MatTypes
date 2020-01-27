@@ -17,7 +17,7 @@
 
 namespace ur_kin {
 
-#define ZERO_THRESH 0.00000001
+#define ZERO_THRESH 0.00000001 // this was from before i changed doubles to floats
 #define SIGN(x) ( ( (x) > 0 ) - ( (x) < 0 ) )
 #define PI M_PI
 
@@ -92,10 +92,7 @@ const DHParams UR_16E_DH{
 };
 
 __device__ __host__ inline void forward(const float* q, float* T, const DHParams& dh);
-__device__ __host__ inline int backward(float* T, const float* q, const DHParams& dh);
-
-__device__ __host__ inline void forward_(const float *q, float *T, const DHParams& dh);
-
+__device__ __host__ inline int backward(const float* T, float* q, unsigned char* status, float q6_des, const DHParams& dh);
 
 __device__ __host__ 
 inline mt::Matrix4f solveFK(mt::State state, const DHParams &dh = UR_5_DH)
@@ -105,24 +102,34 @@ inline mt::Matrix4f solveFK(mt::State state, const DHParams &dh = UR_5_DH)
     return fwd;
 }
 
-__device__ __host__ 
-inline mt::Matrix4f solveFK_(mt::State state, const DHParams& dh = UR_5_DH)
+__device__ __host__ inline
+int solveIK(const mt::Matrix4f& T, mt::Matrix<8, 6>& solutions, unsigned char* status, float q6_des, const DHParams& dh = UR_5_DH)
 {
-    mt::Matrix4f fwd(0.f);
-    forward_(state.data, fwd.data, dh);
-    return fwd;
+    solutions = mt::m_zeros<8, 6>(); 
+    int num_sols = backward(T.data, solutions.data, status, q6_des, dh);
+    return num_sols;
 }
+
+__device__ __host__ inline
+void printStatus(unsigned char status)
+{
+    unsigned char i = status & 0x04;
+    unsigned char j = status & 0x02;
+    unsigned char k = status & 0x01;
+
+    const char* shoulder = (i == 0) ? "left" : "right";
+    const char* wrist = (j == 0) ? "up" : "down";
+    const char* elbow = (k == 0) ? "up" : "down";
+
+    printf("shoulder %s, wrist %s, elbow %s\n", shoulder, wrist, elbow);
+}
+
 
 // Returns the Denavit Hartenberg transformation between two adjacent joints, 
 // where the transform goes from @param joint to joint+1
 __device__ __host__ inline
-mt::Matrix4f get_dh_transform(size_t joint, const mt::State& state, const DHParams& dh = UR_5_DH)
+mt::Matrix4f get_dh_transform(unsigned int joint, const mt::State& state, const DHParams& dh)
 {
-    if (joint > 5)
-    {
-        return mt::identity<4, 4>();
-    }
-
     const float alpha_arr[6] = {M_PI_2, 0.f, 0.f, M_PI_2, -M_PI_2, 0.f};
     const float d_arr[6] = {dh.d1, 0.f, 0.f, dh.d4, dh.d5, dh.d6};
     const float a_arr[6] = {0.f, dh.a2, dh.a3, 0.f, 0.f, 0.f};
@@ -138,48 +145,34 @@ mt::Matrix4f get_dh_transform(size_t joint, const mt::State& state, const DHPara
     const float d = d_arr[joint];
     float a = a_arr[joint];
 
-    mt::Matrix4f rot_z = mt::identity<4, 4>();
-    rot_z.data[0 * 4 + 0] = ct;
-    rot_z.data[1 * 4 + 1] = ct;
-    rot_z.data[0 * 4 + 1] = -st;
-    rot_z.data[1 * 4 + 0] = st;
+    mt::Matrix4f T;
 
-    mt::Matrix4f trans_z = mt::identity<4, 4>();
-    trans_z.data[2 * 4 + 3] = d;
+    T.data[0 * 4 + 0] = ct;
+    T.data[0 * 4 + 1] = -st;
+    T.data[0 * 4 + 2] = 0.f;
+    T.data[0 * 4 + 3] = alpha;
 
-    mt::Matrix4f trans_x = mt::identity<4, 4>();
-    trans_x.data[0 * 4 + 3] = a;
+    T.data[1 * 4 + 0] = st * ca;
+    T.data[1 * 4 + 1] = ct * ca;
+    T.data[1 * 4 + 2] = -sa;
+    T.data[1 * 4 + 3] = -sa * d;
 
-    mt::Matrix4f rot_x = mt::identity<4, 4>();
-    rot_x.data[1 * 4 + 1] = ca;
-    rot_x.data[2 * 4 + 2] = ca;
+    T.data[2 * 4 + 0] = st * sa;
+    T.data[2 * 4 + 1] = ct * sa;
+    T.data[2 * 4 + 2] = ca;
+    T.data[2 * 4 + 3] = ca * d;
+    
+    T.data[3 * 4 + 0] = 0.f;
+    T.data[3 * 4 + 1] = 0.f;
+    T.data[3 * 4 + 2] = 0.f;
+    T.data[3 * 4 + 3] = 1.f;
 
-    rot_x.data[1 * 4 + 2] = -sa;
-    rot_x.data[2 * 4 + 1] = sa;
-
-    return rot_z * trans_z * trans_x * rot_x;
+    return T;
 }
 
 
-
-__device__ __host__
-void get_posture(mt::State& s)
-{
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-__device__ __host__ inline void forward_(const float *q, float *T, const DHParams& dh)
+__device__ __host__ inline 
+void forward(const float *q, float *T, const DHParams& dh)
 {
     const float d1 = dh.d1;
     const float a2 = dh.a2;
@@ -241,232 +234,325 @@ __device__ __host__ inline void forward_(const float *q, float *T, const DHParam
 }
 
 __device__ __host__ inline
-void forward(const float* q, float* T, const DHParams& dh)
+float wrap_angle(float angle)
 {
-    float s1 = sin(*q), c1 = cos(*q); q++;
-    float q234 = *q, s2 = sin(*q), c2 = cos(*q); q++;
-    float s3 = sin(*q), c3 = cos(*q); q234 += *q; q++;
-    q234 += *q; q++;
-    float s5 = sin(*q), c5 = cos(*q); q++;
-    float s6 = sin(*q), c6 = cos(*q); 
-    float s234 = sin(q234), c234 = cos(q234);
+    float mult = 1.f;
+    float add = 0.f;
 
-    const float d1 = dh.d1;
-    const float a2 = dh.a2;
-    const float a3 = dh.a3;
-    const float d4 = dh.d4;
-    const float d5 = dh.d5;
-    const float d6 = dh.d6;
+    if (fabs(angle) < ZERO_THRESH)
+    {
+        mult = 0.f;
+    }
 
-    *T = ((c1*c234-s1*s234)*s5)/2.0 - c5*s1 + ((c1*c234+s1*s234)*s5)/2.0; T++;
-    *T = (c6*(s1*s5 + ((c1*c234-s1*s234)*c5)/2.0 + ((c1*c234+s1*s234)*c5)/2.0) - 
-          (s6*((s1*c234+c1*s234) - (s1*c234-c1*s234)))/2.0); T++;
-    *T = (-(c6*((s1*c234+c1*s234) - (s1*c234-c1*s234)))/2.0 - 
-          s6*(s1*s5 + ((c1*c234-s1*s234)*c5)/2.0 + ((c1*c234+s1*s234)*c5)/2.0)); T++;
-    *T = ((d5*(s1*c234-c1*s234))/2.0 - (d5*(s1*c234+c1*s234))/2.0 - 
-          d4*s1 + (d6*(c1*c234-s1*s234)*s5)/2.0 + (d6*(c1*c234+s1*s234)*s5)/2.0 - 
-          a2*c1*c2 - d6*c5*s1 - a3*c1*c2*c3 + a3*c1*s2*s3); T++;
-    *T = c1*c5 + ((s1*c234+c1*s234)*s5)/2.0 + ((s1*c234-c1*s234)*s5)/2.0; T++;
-    *T = (c6*(((s1*c234+c1*s234)*c5)/2.0 - c1*s5 + ((s1*c234-c1*s234)*c5)/2.0) + 
-          s6*((c1*c234-s1*s234)/2.0 - (c1*c234+s1*s234)/2.0)); T++;
-    *T = (c6*((c1*c234-s1*s234)/2.0 - (c1*c234+s1*s234)/2.0) - 
-          s6*(((s1*c234+c1*s234)*c5)/2.0 - c1*s5 + ((s1*c234-c1*s234)*c5)/2.0)); T++;
-    *T = ((d5*(c1*c234-s1*s234))/2.0 - (d5*(c1*c234+s1*s234))/2.0 + d4*c1 + 
-          (d6*(s1*c234+c1*s234)*s5)/2.0 + (d6*(s1*c234-c1*s234)*s5)/2.0 + d6*c1*c5 - 
-          a2*c2*s1 - a3*c2*c3*s1 + a3*s1*s2*s3); T++;
-    *T = ((c234*c5-s234*s5)/2.0 - (c234*c5+s234*s5)/2.0); T++;
-    *T = ((s234*c6-c234*s6)/2.0 - (s234*c6+c234*s6)/2.0 - s234*c5*c6); T++;
-    *T = (s234*c5*s6 - (c234*c6+s234*s6)/2.0 - (c234*c6-s234*s6)/2.0); T++;
-    *T = (d1 + (d6*(c234*c5-s234*s5))/2.0 + a3*(s2*c3+c2*s3) + a2*s2 - 
-         (d6*(c234*c5+s234*s5))/2.0 - d5*c234); T++;
-    *T = 0.0; T++; *T = 0.0; T++; *T = 0.0; T++; *T = 1.0;
+    if (angle < 0.f)
+    {
+        add = 2 * M_PI;
+    }
+
+    return mult * (angle + add);
 }
 
 __device__ __host__ inline
-int backward(const float* T, float* q_sols, float q6_des, const DHParams& dh)
+float div__(float a, float b)
 {
-    int num_sols = 0;
-    float T02 = -*T; T++; float T00 =  *T; T++; float T01 =  *T; T++; float T03 = -*T; T++; 
-    float T12 = -*T; T++; float T10 =  *T; T++; float T11 =  *T; T++; float T13 = -*T; T++; 
-    float T22 =  *T; T++; float T20 = -*T; T++; float T21 = -*T; T++; float T23 =  *T;
-
-    const float d1 = dh.d1;
-    const float a2 = dh.a2;
-    const float a3 = dh.a3;
-    const float d4 = dh.d4;
-    const float d5 = dh.d5;
-    const float d6 = dh.d6;
-
-    ////////////////////////////// shoulder rotate joint (q1) //////////////////////////////
-    float q1[2];
+    const float diff = fabs(fabs(a) - fabs(b));
+    if (diff < ZERO_THRESH)
     {
-      float A = d6*T12 - T13;
-      float B = d6*T02 - T03;
-      float R = A*A + B*B;
-      if(fabs(A) < ZERO_THRESH) {
-        float div;
-        if(fabs(fabs(d4) - fabs(B)) < ZERO_THRESH)
-          div = -SIGN(d4)*SIGN(B);
-        else
-          div = -d4/B;
-
-        if (fabs(div) > 1.0)
-        {
-            return num_sols;
-        }
-        float arcsin = asin(div);
-        if(fabs(arcsin) < ZERO_THRESH)
-          arcsin = 0.0;
-        if(arcsin < 0.0)
-          q1[0] = arcsin + 2.0*PI;
-        else
-          q1[0] = arcsin;
-        q1[1] = PI - arcsin;
-      }
-      else if(fabs(B) < ZERO_THRESH) {
-        float div;
-        if(fabs(fabs(d4) - fabs(A)) < ZERO_THRESH)
-          div = SIGN(d4)*SIGN(A);
-        else
-        {
-          div = d4/A;
-        }
-
-        if (fabs(div) > 1.0)
-        {
-            return num_sols;
-        }
-
-        float arccos = acos(div);
-        q1[0] = arccos;
-        q1[1] = 2.0*PI - arccos;
-      }
-      else if(d4*d4 > R) {
-        return num_sols;
-      }
-      else {
-        float div = d4 / sqrt(R);
-        if (fabs(div) > 1.0)
-        {
-            return num_sols;
-        }
-        float arccos = acos(div) ;
-        float arctan = atan2(-B, A);
-        float pos = arccos + arctan;
-        float neg = -arccos + arctan;
-        if(fabs(pos) < ZERO_THRESH)
-          pos = 0.0;
-        if(fabs(neg) < ZERO_THRESH)
-          neg = 0.0;
-        if(pos >= 0.0)
-          q1[0] = pos;
-        else
-          q1[0] = 2.0*PI + pos;
-        if(neg >= 0.0)
-          q1[1] = neg; 
-        else
-          q1[1] = 2.0*PI + neg;
-      }
+        a = SIGN(a);
+        b = SIGN(b);
     }
-    ////////////////////////////////////////////////////////////////////////////////
-
-    ////////////////////////////// wrist 2 joint (q5) //////////////////////////////
-    float q5[2][2];
+    else 
     {
-      for(int i=0;i<2;i++) {
-        float numer = (T03*sin(q1[i]) - T13*cos(q1[i])-d4);
-        float div;
+        a = a / b;
+        b = 1.f;
+    }
+    return a * b;
+}
+
+__device__ __host__ inline 
+float assign__(float a)
+{
+    if (fabs(a) < ZERO_THRESH)
+        return 0.f;
+    return a;
+}
+
+__device__ __host__ inline 
+bool solve_for_q1(const float* T, float* q1, float d4, float d6)
+{
+    const float T02 = - T[0 * 4 + 0];
+    const float T03 = -T[0 * 4 + 3];
+    const float T12 = -T[1 * 4 + 0];
+    const float T13 = -T[1 * 4 + 3];
+
+    const float A = d6 * T12 - T13;
+    const float B = d6 * T02 - T03;
+    const float R = A * A + B * B;
+
+    bool solver_failed = false;
+
+    const float div_az = div__(-d4, B);
+    const float arcsin_az = wrap_angle(asin(div_az));
+
+    const float div_bz = div__(d4, A);
+    const float arccos_bz = acos(div_bz);
+
+    const float div = d4 / sqrt(R);
+    const float arccos = acos(div);
+    const float arctan = atan2(-B, A);
+
+    float pos = arccos + arctan;
+    float neg = -arccos + arctan;
+    if (fabs(pos) < ZERO_THRESH)
+        pos = 0.0;
+    if (fabs(neg) < ZERO_THRESH)
+        neg = 0.0;
+
+    if (fabs(A) < ZERO_THRESH)
+    {
+        solver_failed |= (fabs(div_az) > 1.0);
+        // std::cout << "div_az : " << div_az << "\n";
+
+        q1[0] = arcsin_az;
+        q1[1] = PI - arcsin_az;
+    }
+    else if (fabs(B) < ZERO_THRESH)
+    {
+        solver_failed |= (fabs(div_bz) > 1.0);
+        
+        // std::cout << "div_bz : " << div_bz << "\n";
+        
+        q1[0] = arccos_bz;
+        q1[1] = 2.0 * PI - arccos_bz;
+    }
+    else
+    {
+        solver_failed |= (d4 * d4 > R);
+        solver_failed |= (fabs(div) > 1.0);
+
+        // std::cout << "d4^2, R : " << d4*d4 << "; " << R << "\n";
+        // std::cout << "div : " << div << "\n";
+
+        // std::cout << pos << ", " << neg << "\n";
+        if (pos >= 0.0)
+            q1[0] = pos;
+        else
+            q1[0] = 2.0 * PI + pos;
+        if (neg >= 0.0)
+            q1[1] = neg;
+        else
+            q1[1] = 2.0 * PI + neg;
+    }
+
+    return solver_failed;
+}
+
+bool solve_for_q5(const float* T, const float* q1, float* q5, float d4, float d6)
+{
+    const float T03 = -T[0 * 4 + 3];
+    const float T13 = -T[1 * 4 + 3];
+
+    bool solver_failed = false;
+
+    for (int i = 0; i < 2; i++)
+    {
+        const float numer = (T03 * sin(q1[i]) - T13 * cos(q1[i]) - d4);
+        float div; 
         if(fabs(fabs(numer) - fabs(d6)) < ZERO_THRESH)
           div = SIGN(numer) * SIGN(d6);
         else
           div = numer / d6;
+        solver_failed |= (fabs(div) > 1.f);
 
-        if (fabs(div) > 1.0)
-        {
-            return 0;
-        }
-
-        float arccos = acos(div);
-        q5[i][0] = arccos;
-        q5[i][1] = 2.0*PI - arccos;
-      }
+        const float arccos = acos(div);
+        q5[i * 2 + 0] = arccos;                  // wrist up
+        q5[i * 2 + 1] = 2.0 * PI - arccos;       // wrist down
     }
-    ////////////////////////////////////////////////////////////////////////////////
 
-     {
-       for(int i=0;i<2;i++) {
-         for(int j=0;j<2;j++) {
-           float c1 = cos(q1[i]), s1 = sin(q1[i]);
-           float c5 = cos(q5[i][j]), s5 = sin(q5[i][j]);
-           float q6;
-           ////////////////////////////// wrist 3 joint (q6) //////////////////////////////
-           if(fabs(s5) < ZERO_THRESH)
-             q6 = q6_des;
-           else {
-             q6 = atan2(SIGN(s5)*-(T01*s1 - T11*c1), 
-                        SIGN(s5)*(T00*s1 - T10*c1));
-             if(fabs(q6) < ZERO_THRESH)
-               q6 = 0.0;
-             if(q6 < 0.0)
-               q6 += 2.0*PI;
-           }
-           ////////////////////////////////////////////////////////////////////////////////
-
-           float q2[2], q3[2], q4[2];
-           ///////////////////////////// RRR joints (q2,q3,q4) ////////////////////////////
-           float c6 = cos(q6), s6 = sin(q6);
-           float x04x = -s5*(T02*c1 + T12*s1) - c5*(s6*(T01*c1 + T11*s1) - c6*(T00*c1 + T10*s1));
-           float x04y = c5*(T20*c6 - T21*s6) - T22*s5;
-           float p13x = d5*(s6*(T00*c1 + T10*s1) + c6*(T01*c1 + T11*s1)) - d6*(T02*c1 + T12*s1) + 
-                         T03*c1 + T13*s1;
-           float p13y = T23 - d1 - d6*T22 + d5*(T21*c6 + T20*s6);
-
-           float c3 = (p13x*p13x + p13y*p13y - a2*a2 - a3*a3) / (2.0*a2*a3);
-           if(fabs(fabs(c3) - 1.0) < ZERO_THRESH)
-             c3 = SIGN(c3);
-           else if(fabs(c3) > 1.0) {
-             // TODO NO SOLUTION
-             continue;
-           }
-           float arccos = acos(c3);
-           q3[0] = arccos;
-           q3[1] = 2.0*PI - arccos;
-           float denom = a2*a2 + a3*a3 + 2*a2*a3*c3;
-           if (fabs(denom) < ZERO_THRESH)
-           {
-               continue;
-           }
-
-           float s3 = sin(arccos);
-           float A = (a2 + a3*c3), B = a3*s3;
-           q2[0] = atan2((A*p13y - B*p13x) / denom, (A*p13x + B*p13y) / denom);
-           q2[1] = atan2((A*p13y + B*p13x) / denom, (A*p13x - B*p13y) / denom);
-           float c23_0 = cos(q2[0]+q3[0]);
-           float s23_0 = sin(q2[0]+q3[0]);
-           float c23_1 = cos(q2[1]+q3[1]);
-           float s23_1 = sin(q2[1]+q3[1]);
-           q4[0] = atan2(c23_0*x04y - s23_0*x04x, x04x*c23_0 + x04y*s23_0);
-           q4[1] = atan2(c23_1*x04y - s23_1*x04x, x04x*c23_1 + x04y*s23_1);
-           ////////////////////////////////////////////////////////////////////////////////
-           for(int k=0;k<2;k++) {
-             if(fabs(q2[k]) < ZERO_THRESH)
-               q2[k] = 0.0;
-             else if(q2[k] < 0.0) q2[k] += 2.0*PI;
-             if(fabs(q4[k]) < ZERO_THRESH)
-               q4[k] = 0.0;
-             else if(q4[k] < 0.0) q4[k] += 2.0*PI;
-             q_sols[num_sols*6+0] = q1[i];    q_sols[num_sols*6+1] = q2[k]; 
-             q_sols[num_sols*6+2] = q3[k];    q_sols[num_sols*6+3] = q4[k]; 
-             q_sols[num_sols*6+4] = q5[i][j]; q_sols[num_sols*6+5] = q6; 
-             num_sols++;
-           }
-       }
-     }
-     return num_sols;
-   }
+    return solver_failed;
 }
 
+__device__ __host__ inline 
+void solve_for_q6(const float *T, float* q6, float q6_des, float s1, float c1, float s5)
+{
+    const float T00 = T[0 * 4 + 1];
+    const float T01 = T[0 * 4 + 2];
+    const float T10 = T[1 * 4 + 1];
+    const float T11 = T[1 * 4 + 2];
 
+    if (fabs(s5) < ZERO_THRESH)
+        *q6 = q6_des;
+    else
+    {
+        *q6 = atan2(SIGN(s5) * -(T01 * s1 - T11 * c1),
+                    SIGN(s5) * (T00 * s1 - T10 * c1));
+        if (fabs(*q6) < ZERO_THRESH)
+            *q6 = 0.0;
+        if (*q6 < 0.0)
+            *q6 += 2.0 * PI;
+    }
+}
+
+__host__ __device__ inline 
+bool solve_for_q234(const float *T, float *q2, float *q3, float *q4, float s1, float c1, float s5, float c5, float s6, float c6, const DHParams& dh)
+{
+    const float T02 = - T[0 * 4 + 0];
+    const float T00 = T[0 * 4 + 1];
+    const float T01 = T[0 * 4 + 2];
+    const float T03 = -T[0 * 4 + 3];
+    const float T12 = -T[1 * 4 + 0];
+    const float T10 = T[1 * 4 + 1];
+    const float T11 = T[1 * 4 + 2];
+    const float T13 = -T[1 * 4 + 3];
+    const float T22 = T[2 * 4 + 0];
+    const float T20 = -T[2 * 4 + 1];
+    const float T21 = -T[2 * 4 + 2];
+    const float T23 = T[2 * 4 + 3];
+    
+    const float d1 = dh.d1;
+    const float a2 = dh.a2;
+    const float a3 = dh.a3;
+    const float d4 = dh.d4;
+    const float d5 = dh.d5;
+    const float d6 = dh.d6;
+    
+    const float x04x = -s5 * (T02 * c1 + T12 * s1) - c5 * (s6 * (T01 * c1 + T11 * s1) - c6 * (T00 * c1 + T10 * s1));
+    const float x04y = c5 * (T20 * c6 - T21 * s6) - T22 * s5;
+    const float p13x = d5 * (s6 * (T00 * c1 + T10 * s1) + c6 * (T01 * c1 + T11 * s1)) - d6 * (T02 * c1 + T12 * s1) +
+                       T03 * c1 + T13 * s1;
+    const float p13y = T23 - d1 - d6 * T22 + d5 * (T21 * c6 + T20 * s6);
+
+    float c3 = (p13x * p13x + p13y * p13y - a2 * a2 - a3 * a3) / (2.0 * a2 * a3);
+    if (fabs(fabs(c3) - 1.0) < ZERO_THRESH)
+        c3 = SIGN(c3);
+    else if (fabs(c3) > 1.0)
+    {
+        return true;
+    }
+    float arccos = acos(c3);
+    q3[0] = arccos;            // elbow up
+    q3[1] = 2.0 * PI - arccos; // elbow down
+    float denom = a2 * a2 + a3 * a3 + 2 * a2 * a3 * c3;
+    if (fabs(denom) < ZERO_THRESH)
+    {
+        return true;
+    }
+
+    const float s3 = sin(arccos);
+    const float A = (a2 + a3 * c3), B = a3 * s3;
+    q2[0] = atan2((A * p13y - B * p13x) / denom, (A * p13x + B * p13y) / denom);
+    q2[1] = atan2((A * p13y + B * p13x) / denom, (A * p13x - B * p13y) / denom);
+    float c23_0 = cos(q2[0] + q3[0]);
+    float s23_0 = sin(q2[0] + q3[0]);
+    float c23_1 = cos(q2[1] + q3[1]);
+    float s23_1 = sin(q2[1] + q3[1]);
+    q4[0] = atan2(c23_0 * x04y - s23_0 * x04x, x04x * c23_0 + x04y * s23_0);
+    q4[1] = atan2(c23_1 * x04y - s23_1 * x04x, x04x * c23_1 + x04y * s23_1);
+
+    for (int k = 0; k < 2; ++k)
+    {
+        if (fabs(q2[k]) < ZERO_THRESH)
+            q2[k] = 0.0;
+        else if (q2[k] < 0.0)
+            q2[k] += 2.0 * PI;
+        if (fabs(q4[k]) < ZERO_THRESH)
+            q4[k] = 0.0;
+        else if (q4[k] < 0.0)
+            q4[k] += 2.0 * PI;
+    }
+    return false;
+}
+
+__device__ __host__ inline
+int backward(const float *T, float *q_sols, unsigned char* status, float q6_des, const DHParams &dh)
+{
+    const float d1 = dh.d1;
+    const float a2 = dh.a2;
+    const float a3 = dh.a3;
+    const float d4 = dh.d4;
+    const float d5 = dh.d5;
+    const float d6 = dh.d6;
+
+    bool solver_failed = false;
+
+    float q1[2]; 
+    float q5[2][2];
+    float q6[2][2];
+    float q2[2][2][2];
+    float q3[2][2][2];
+    float q4[2][2][2];
+    
+    ////////////////////////////// shoulder rotate joint (q1) //////////////////////////////
+
+    bool q1_failed = solve_for_q1(T, q1, d4, d6);
+    solver_failed |= q1_failed;
+
+    //q1[0] -> shoulder left
+    //q2[1] -> shoulder right
+
+    ////////////////////////////// wrist 2 joint (q5) //////////////////////////////
+    
+    bool q5_failed = solve_for_q5(T, q1, &(q5[0][0]), d4, d6);
+    solver_failed |= q5_failed;
+    
+    // q5[i][0] -> wrist up
+    // q5[i][1] -> wrist down
+
+    ////////////////////////////////////////////////////////////////////////////////
+
+    int num_sols = 0;
+
+    bool q234_failed = false;
+
+    for (int i = 0; i < 2; i++)
+    {
+        for (int j = 0; j < 2; j++)
+        {
+            const float c1 = cos(q1[i]);
+            const float s1 = sin(q1[i]);
+            const float c5 = cos(q5[i][j]);
+            const float s5 = sin(q5[i][j]);
+
+            ////////////////////////////// wrist 3 joint (q6) //////////////////////////////
+
+            solve_for_q6(T, &(q6[i][j]), q6_des, s1, c1, s5);
+
+            ////////////////////////////////////////////////////////////////////////////////
+
+            const float c6 = cos(q6[i][j]);
+            const float s6 = sin(q6[i][j]);
+            
+            ///////////////////////////// RRR joints (q2,q3,q4) ////////////////////////////
+
+            q234_failed = solve_for_q234(T, q2[i][j], q3[i][j], q4[i][j], s1, c1, s5, c5, s6, c6, dh);
+
+            // q3[i][j][0] -> elbow up
+            // q3[i][j][1] -> elbow down
+            
+            ////////////////////////////////////////////////////////////////////////////////
+
+            if (!solver_failed && !q234_failed)
+            {
+                for (int k = 0; k < 2; ++k)
+                {
+                    q_sols[num_sols * 6 + 0] = q1[i];
+                    q_sols[num_sols * 6 + 1] = q2[i][j][k];
+                    q_sols[num_sols * 6 + 2] = q3[i][j][k];
+                    q_sols[num_sols * 6 + 3] = q4[i][j][k];
+                    q_sols[num_sols * 6 + 4] = q5[i][j];
+                    q_sols[num_sols * 6 + 5] = q6[i][j];
+
+                    status[num_sols] |= i << 2;
+                    status[num_sols] |= j << 1;
+                    status[num_sols] |= k;
+
+                    num_sols++;
+                }
+            }
+        }
+    }
+    return num_sols;
+}
 
 }; // namespace ur_kin
 #endif
