@@ -1,13 +1,5 @@
-#ifndef TYPES_HPP
-#define TYPES_HPP
-
-#ifndef __host__
-#define __host__ 
-#endif
-
-#ifndef __device__
-#define __device__
-#endif
+#ifndef LIBCUMANIP_TYPES_H
+#define LIBCUMANIP_TYPES_H
 
 #ifndef _USE_MATH_DEFINES
 #define _USE_MATH_DEFINES
@@ -32,6 +24,12 @@ struct Vector;
 
 template <size_t Rows, size_t Cols>
 struct Matrix;
+
+template <size_t Len>
+struct IntVector;
+
+template <size_t Rows, size_t Cols>
+struct IntMatrix;
 
 using Vector3f = Vector<3>;
 using Vector4f = Vector<4>;
@@ -69,7 +67,40 @@ struct Vector
     __host__ __device__ inline float dot(const Vector<Len>& rhs) const;
     __host__ __device__ inline Vector<Len> abs() const;
     __host__ __device__ inline Vector<Len> normalized() const;
+
+    __host__ __device__ inline float max() const;
+    __host__ __device__ inline float min() const;
 };
+
+template <size_t Len> 
+__host__ __device__ inline 
+float Vector<Len>::max() const 
+{
+    float v = data[0];
+    for (size_t i = 0; i < Len; ++i)
+    {
+        if (data[i] > v)
+        {
+            v = data[i];
+        }
+    }
+    return v;
+}
+
+template <size_t Len> 
+__host__ __device__ inline 
+float Vector<Len>::min() const 
+{
+    float v = data[0];
+    for (size_t i = 0; i < Len; ++i)
+    {
+        if (data[i] < v)
+        {
+            v = data[i];
+        }
+    }
+    return v;
+}
 
 template <size_t Len>
 __host__ __device__ inline Vector<Len> zeros();
@@ -82,6 +113,7 @@ __host__ __device__ inline Vector4f vec4f(float x, float y, float z, float w);
 __host__ __device__ inline Vector6f vec6f(float a1, float a2, float a3, float a4, float a5, float a6);
 
 __host__ __device__ inline State state(float a1, float a2, float a3, float a4, float a5, float a6);
+__host__ __device__ inline State state_from_deg(float a1, float a2, float a3, float a4, float a5, float a6);
 __host__ __device__ inline Point point(float x, float y, float z, float roll, float pitch, float yaw);
 __host__ __device__ inline Point3 point(float x, float y, float z);
 
@@ -133,12 +165,13 @@ struct Matrix
     __host__ __device__ inline explicit Matrix(float val);
     __host__ __device__ inline explicit Matrix(float* val);
 
-    __host__ __device__ inline size_t rows() { return Rows; }
-    __host__ __device__ inline size_t cols() { return Cols; }
+    __host__ __device__ inline size_t rows() const { return Rows; }
+    __host__ __device__ inline size_t cols() const { return Cols; }
+    __host__ __device__ inline size_t size() const { return Rows * Cols; };
 
     __host__ __device__ inline Matrix<Rows, Cols>& operator=(const Matrix<Rows, Cols>& rhs);
 
-    __host__ __device__ inline void set_row(size_t i, const Vector<Cols> &row);
+    __host__ __device__ inline void set_row(size_t i, const Vector<Cols>& row);
     __host__ __device__ inline void set_col(size_t j, const Vector<Rows>& col);
 
     __host__ __device__ inline Vector<Cols> get_row(size_t i) const;
@@ -149,7 +182,25 @@ struct Matrix
     __host__ __device__ inline float trace() const;
 
     __host__ __device__ inline bool approx_equal(const Matrix<Rows, Cols>& rhs, float eps=0.0001);
+
+    __host__ __device__ inline float sum() const;
+    __host__ __device__ inline float avg() const;
+    __host__ __device__ inline float max() const;
+    __host__ __device__ inline float min() const;
+
+    __host__ __device__ inline int nz_count(float eps=0.00000001) const;
+
+    __host__ __device__ inline Matrix<Rows, Cols> replace(float x, float y, float eps=0.00000001) const;
 };
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline Matrix<Rows, Cols> permutate_rows(const Matrix<Rows, Cols>& mat, int indices[Rows]);
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline Matrix<Rows, Cols> min_elems(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs);
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline Matrix<Rows, Cols> max_elems(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs);
 
 template <size_t Rows, size_t Cols>
 __host__ __device__ inline Matrix<Rows, Cols> operator*(float lhs, const Matrix<Rows, Cols>& rhs);
@@ -205,10 +256,158 @@ __host__ __device__ inline void printMat(const Matrix<Rows, Cols>& mat, const ch
 template <size_t Rows, size_t Cols>
 __host__ inline std::ostream& operator<<(std::ostream& os, const Matrix<Rows, Cols>& mat);
 
+namespace
+{
+
+// helper function for matrix inversion
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline bool swap_lines_2darray(float a[Rows][Cols], size_t r1, size_t r2)
+{
+    if (r1 >= Rows || r2 >= Rows)
+    {
+        return false;
+    }
+
+    for (size_t j = 0; j < Cols; ++j)
+    {
+        float tmp = a[r1][j];
+        a[r1][j] = a[r2][j];
+        a[r2][j] = tmp;
+    }
+    return true;
+}
+
+} 
+
+// from http://www.virtual-maxim.de/matrix-invertieren-in-c-plus-plus/
+template <size_t N>
+__host__ __device__ inline 
+bool invert(const Matrix<N, N>& mat, Matrix<N, N>& inverted)
+{
+    double A[N][2 * N];
+    for (size_t i = 0; i < N; ++i)
+    {
+        for (size_t j = 0; j < N; ++j)
+            A[i][j] = mat.data[i * N + j];
+        for (size_t j = N; j < 2 * N; ++j)
+            A[i][j] = (i == j - N) ? 1.0 : 0.0;
+    }
+
+    for (size_t k = 0; k < N - 1; ++k)
+    {
+        if (A[k][k] == 0.0)
+        {
+            for (size_t i = k + 1; i < N; ++i)
+            {
+                if (A[i][k] != 0.0)
+                {
+                    ::swap_lines_2darray<N, 2 * N>(A, k, i);
+                    break;
+                }
+                else if (i == N - 1)
+                    return false;
+            }
+        }
+
+        for (size_t i = k + 1; i < N; ++i)
+        {
+            double p = A[i][k] / A[k][k];
+            for (size_t j = k; j < 2 * N; ++j)
+                A[i][j] -= A[k][j] * p;
+        }
+    }
+
+    double det = 1.0;
+    for (size_t k = 0; k < N; ++k)
+        det *= A[k][k];
+
+    if (det == 0.0) 
+        return false;
+
+    for (size_t k = N - 1; k > 0; --k)
+    {
+        for (int i = k - 1; i >= 0; --i)
+        {
+            double p = A[i][k] / A[k][k];
+            for (size_t j = k; j < 2 * N; ++j)
+                A[i][j] -= A[k][j] * p;
+        }
+    }
+
+    for (size_t i = 0; i < N; ++i)
+    {
+        const double f = A[i][i];
+        for (size_t j = N; j < 2 * N; ++j)
+            inverted.data[i * N + (j - N)] = A[i][j] / f;
+    }
+
+    return true;
+}
 
 
 
+// ================================================================================= //
+// IntVector
+// ================================================================================= //
 
+template <size_t Len>
+struct IntVector
+{
+    int data[Len];
+    __host__ __device__ inline IntVector() {};
+    __host__ __device__ inline explicit IntVector(int val); 
+
+    __host__ __device__ inline IntVector<Len>& operator=(const IntVector<Len>& rhs);
+
+    __host__ __device__ inline size_t size() { return Len; }
+};
+
+template <size_t Len> 
+__host__ __device__ inline bool operator==(const IntVector<Len>& lhs, const IntVector<Len>& rhs);
+
+template <size_t Len> 
+__host__ __device__ inline bool operator!=(const IntVector<Len>& lhs, const IntVector<Len>& rhs);
+
+template <size_t Len>
+__host__ __device__ inline void printVec(const IntVector<Len>& vec);
+
+template <size_t Len>
+__host__ inline std::ostream& operator<<(std::ostream&, const IntVector<Len>& vec);
+
+
+// ================================================================================= //
+// IntMatrix
+// ================================================================================= //
+
+template <size_t Rows, size_t Cols>
+struct IntMatrix
+{
+    int data[Rows * Cols];
+    __host__ __device__ inline IntMatrix() {};
+    __host__ __device__ inline explicit IntMatrix(int val);
+
+    __host__ __device__ inline size_t rows() { return Rows; }
+    __host__ __device__ inline size_t cols() { return Cols; }
+
+    __host__ __device__ inline IntMatrix<Rows, Cols>& operator=(const IntMatrix<Rows, Cols>& rhs);
+
+    __host__ __device__ inline void set_row(size_t i, const IntVector<Cols>& row);
+    __host__ __device__ inline void set_col(size_t j, const IntVector<Rows>& col);
+
+    __host__ __device__ inline IntVector<Cols> get_row(size_t i) const;
+    __host__ __device__ inline IntVector<Rows> get_col(size_t j) const;
+
+    __host__ __device__ inline int sum() const;
+};
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline void printMat(const IntMatrix<Rows, Cols>& mat);
+
+template <size_t Rows, size_t Cols>
+__host__ inline std::ostream& operator<<(std::ostream& os, const IntMatrix<Rows, Cols>& mat);
+
+template <size_t Rows, size_t Cols> 
+__host__ __device__ inline IntMatrix<Rows, Cols> intm_identity();
 
 
 // ================================================================================= //
@@ -410,6 +609,11 @@ __host__ __device__ inline
 State state(float a1, float a2, float a3, float a4, float a5, float a6)
 {
     return vec6f(a1, a2, a3, a4, a5, a6);
+}
+
+__host__ __device__ inline State state_from_deg(float a1, float a2, float a3, float a4, float a5, float a6)
+{
+    return deg_to_rad(state(a1, a2, a3, a4, a5, a6));
 }
 
 __host__ __device__ inline 
@@ -1034,8 +1238,312 @@ Matrix<Rows, Cols> operator-(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, C
     return res;
 }
 
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+float Matrix<Rows, Cols>::sum() const
+{
+    float sum = 0.f;
+    for (int i = 0; i < Rows; ++i)
+    {
+        for (int j = 0; j < Cols; ++j)
+        {
+            sum += data[i * Cols + j];
+        }
+    }
+    return sum;
+}
+
+template <size_t Len> 
+__host__ __device__ inline 
+bool operator==(const IntVector<Len>& lhs, const IntVector<Len>& rhs)
+{
+    for (size_t i = 0; i < Len; ++i)
+    {
+        if (lhs.data[i] != rhs.data[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <size_t Len> 
+__host__ __device__ inline 
+bool operator!=(const IntVector<Len>& lhs, const IntVector<Len>& rhs)
+{
+    return !(lhs == rhs);
+}
+
+template <size_t Len>
+__host__ __device__ inline 
+IntVector<Len>::IntVector(int val)
+{
+    for (size_t i = 0; i < Len; ++i)
+    {
+        data[i] = val;
+    }
+}
+
+template <size_t Len>
+__host__ __device__ inline 
+IntVector<Len>& IntVector<Len>::operator=(const IntVector<Len>& rhs)
+{
+    for (size_t i = 0; i < Len; ++i)
+    {
+        data[i] = rhs.data[i];
+    }
+    return *this;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+IntMatrix<Rows, Cols>::IntMatrix(int val)
+{
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        data[i] = val;
+    }
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+IntMatrix<Rows, Cols>& IntMatrix<Rows, Cols>::operator=(const IntMatrix<Rows, Cols>& rhs)
+{
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        data[i] = rhs.data[i];
+    }
+    return *this;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+void IntMatrix<Rows, Cols>::set_row(size_t i, const IntVector<Cols>& row)
+{
+    for (size_t j = 0; j < Cols; ++j)
+    {
+        data[i * Cols + j] = row[j];
+    }
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+void IntMatrix<Rows, Cols>::set_col(size_t j, const IntVector<Rows>& col)
+{
+    for (size_t i = 0; i < Rows; ++i)
+    {
+        data[i * Cols + j] = col[i];
+    }
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+IntVector<Cols> IntMatrix<Rows, Cols>::get_row(size_t i) const
+{
+    IntVector<Cols> v;
+    for (size_t j = 0; j < Cols; ++j)
+    {
+        v.data[j] = data[i * Cols + j];
+    }
+    return v;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline
+IntVector<Rows> IntMatrix<Rows, Cols>::get_col(size_t j) const 
+{
+    IntVector<Rows> v;
+    for (size_t i = 0; j < Rows; ++i)
+    {
+        v.data[i] = data[i * Cols + j];
+    }
+    return v;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline
+int IntMatrix<Rows, Cols>::sum() const
+{
+    int s = 0;
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        s += data[i];
+    }
+    return s;
+}
+
+template <size_t Len>
+__host__ __device__ inline 
+void printVec(const IntVector<Len>& vec)
+{
+    for (size_t i = 0; i < Len; ++i)
+    {
+        printf("%d ", vec.data[i]);
+    }
+}
+
+template <size_t Len>
+__host__ inline 
+std::ostream& operator<<(std::ostream& os, const IntVector<Len>& vec)
+{
+    for (size_t i = 0; i < Len; ++i)
+    {
+        os << vec.data[i] << " ";
+    }
+    return os;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+void printMat(const IntMatrix<Rows, Cols>& mat)
+{
+    for (size_t i = 0; i < Rows; ++i)
+    {
+        for (size_t j = 0; j < Cols; ++j)
+        {
+            printf("%d ", mat.data[i * Cols + j]);
+        }
+        printf("\n");
+    }
+}
+
+template <size_t Rows, size_t Cols>
+__host__ inline 
+std::ostream& operator<<(std::ostream& os, const IntMatrix<Rows, Cols>& mat)
+{
+    for (size_t i = 0; i < Rows; ++i)
+    {
+        for (size_t j = 0; j < Cols; ++j)
+        {
+            os << mat.data[i * Cols + j] << " ";
+        }
+        os << "\n";
+    }
+    return os;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+IntMatrix<Rows, Cols> intm_identity() 
+{
+    IntMatrix<Rows, Cols> m(0);
+    size_t n = Rows < Cols ? Rows : Cols;
+    for (size_t i = 0; i < n; ++i)
+    {
+        m.data[i * Cols + i] = 1;
+    }
+    return m;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+float Matrix<Rows, Cols>::avg() const 
+{
+    return sum() / float(size());
+}
+
+__host__ __device__ inline
+float min2(const float x, const float y)
+{
+    return (x < y) ? x : y;
+}
+
+__host__ __device__ inline
+float max2(const float x, const float y)
+{
+    return (x > y) ? x : y;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+float Matrix<Rows, Cols>::max() const 
+{
+    int m = data[0];
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        m = max2(m, data[i]);
+    } 
+    return m;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+float Matrix<Rows, Cols>::min() const 
+{
+    float m = data[0];
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        m = min2(m, data[i]);
+    }
+    return m;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+int Matrix<Rows, Cols>::nz_count(float eps) const 
+{
+    int cnt = 0; 
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        if (abs(data[i]) > eps)
+        {
+            cnt++;
+        }
+    }
+    return cnt;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Matrix<Rows, Cols> Matrix<Rows, Cols>::replace(float x, float y, float eps) const
+{
+    Matrix<Rows, Cols> out = *this;
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        if (abs(out.data[i] - x) < eps)
+        {
+            out.data[i] = y;
+        }
+    }
+    return out;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Matrix<Rows, Cols> min_elems(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs)
+{
+    Matrix<Rows, Cols> out;
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        out.data[i] = min2(lhs.data[i], rhs.data[i]);
+    }
+    return out;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Matrix<Rows, Cols> max_elems(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs)
+{
+    Matrix<Rows, Cols> out;
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        out.data[i] = max2(lhs.data[i], rhs.data[i]);
+    }
+    return out;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+Matrix<Rows, Cols> permutate_rows(const Matrix<Rows, Cols>& mat, int indices[Rows])
+{
+    mt::Matrix<Rows, Cols> res = mat;
+    for (int i = 0; i < Rows; ++i)
+    {
+        res.set_row(indices[i], mat.get_row(i));
+    }
+    return res;
+}
 
 } // namespace mt
-
 
 #endif
