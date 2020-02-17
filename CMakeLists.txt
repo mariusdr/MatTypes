@@ -40,10 +40,11 @@ endif()
 
 
 
-set (SOURCES main.cpp)
-set (TEST_FILES test_types.cpp test_kin.cpp)
+set (SOURCES src/main.cpp)
+# set (TEST_FILES test/test_types.cpp test/test_kin.cpp)
+set (TEST_FILES test/test_types.cpp)
 
-add_executable(main main.cpp)
+add_executable(main ${SOURCES})
 
 add_executable(testRunner ${TEST_FILES})
 target_link_libraries(testRunner gtest_main)
