@@ -1,0 +1,587 @@
+#ifndef LIBCUMANIP_IKSOLVER_H
+#define LIBCUMANIP_IKSOLVER_H
+#include <inrop/libcumanip/Types.hpp>
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/device_ptr.h>
+#include <thrust/functional.h>
+
+#include <inrop/libcumanip/Kinematics.hpp>
+#include <inrop/libcumanip/CudaUtils.h>
+#include <inrop/libcumanip/CommonOps.h>
+#include <inrop/libcumanip/InropExportMacros.h>
+
+#include <iostream>
+#include <cstring>
+
+namespace cumanip
+{
+
+
+// IK for 6 axis robots is redundant ie we get up to 8 solutions for a given cartesian point
+struct IKSolution 
+{
+    mt::Matrix<8, 6> states;
+    mt::Vector<8> manipulability;
+    unsigned char status[8];
+    bool valid[8];
+    unsigned int num_solutions;
+
+    __host__ __device__ 
+    IKSolution()
+    {
+        states = mt::Matrix<8, 6>(0.f);
+        manipulability = mt::Vector<8>(0.f);
+        memset(status, 0, sizeof(unsigned char) * 8);
+    }
+
+    __host__ __device__ 
+    bool is_valid(int idx)
+    {
+        return valid[idx];
+    }
+
+    __host__ __device__ 
+    mt::State get_state(int idx) const
+    {
+        return states.get_row(idx);
+    }
+
+    __host__ __device__ 
+    unsigned int get_num_solutions() const
+    {
+        return num_solutions;
+    }
+
+    __host__ __device__ 
+    void set_state(int idx, mt::State state)
+    {
+        states.set_row(idx, state);
+    }
+
+    __host__ __device__
+    unsigned char get_status(int idx) const
+    {
+        return status[idx];
+    }
+
+    __host__ __device__ 
+    void set_status(int idx, unsigned char stat)
+    {
+        status[idx] = stat;
+    }
+
+    __host__ __device__ 
+    int get_idx_of_status(unsigned char s) const
+    {
+        int idx = -1;
+        for (int i = 0; i < num_solutions; ++i)
+        {
+            if (status[i] == s)
+            {
+                idx = i;
+            }
+        }
+        return idx;
+    }
+
+    __host__ __device__ 
+    float get_manipulability(int idx) const
+    {
+        return manipulability.data[idx];
+    }
+
+    __host__ __device__ 
+    void set_manipulability(int idx, float manip)
+    {
+        manipulability.data[idx] = manip;
+    }
+
+    __host__ __device__ 
+    void set_invalid(int idx)
+    {
+        valid[idx] = false;
+    }
+
+    __host__ __device__ 
+    void set_valid(int idx)
+    {
+        valid[idx] = true;
+    }
+};
+
+
+
+
+
+
+} // namespace
+#endif
+
+
+
+
+
+#include <inrop/libcumanip/ManipulabilityKernels.h>
+
+#include <thrust/fill.h>
+#include <thrust/execution_policy.h>
+#include <thrust/adjacent_difference.h>
+#include <thrust/tuple.h>
+#include <thrust/iterator/zip_iterator.h>
+
+#include <inrop/libcumanip/CudaUtils.h>
+#include <inrop/libcumanip/CommonOps.h>
+#include <inrop/libcumanip/Kinematics.hpp>
+
+#include <iostream>
+#include <algorithm>
+#include <string>
+#include <fstream>
+#include <iomanip>
+#include <set>
+#include <chrono>
+#include <sstream>
+#include <cstring>
+
+#include <inrop/libcumanip/Types.hpp>
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/device_ptr.h>
+#include <thrust/functional.h>
+
+
+
+namespace cumanip 
+{
+
+struct RunFKOp
+{
+    __host__ __device__ 
+    mt::Matrix4f operator()(const mt::State& state)
+    {
+        return ur_kin::solveFK(state);
+    }
+};
+
+__host__
+size_t run_fk_solver(const thrust::device_vector<mt::State>& states, thrust::device_vector<mt::Matrix4f>& poses)
+{
+    RunFKOp fkOp;
+    thrust::transform(states.begin(), states.end(), poses.begin(), fkOp);
+    CUDA_ASSERT(cudaGetLastError());
+    return poses.size();
+}
+
+struct RunIKOp
+{
+    __host__ __device__
+    IKSolution operator()(const mt::Matrix4f& transform)
+    {
+        IKSolution sol;
+        sol.manipulability = mt::Vector<8>(-1.f);
+        sol.num_solutions = ur_kin::solveIK(transform, sol.states, sol.status, 0.f);
+
+        for (int i = 0; i < sol.num_solutions; ++i)
+        {
+            mt::State s = sol.states.get_row(i);
+            float tm, rm;
+            ur_kin::compute_manipulability(s, tm, rm);
+            sol.manipulability.data[i] = tm;
+        }
+
+        return sol;
+    }
+};
+
+struct PointToMatOp 
+{
+    __host__ __device__
+    mt::Matrix4f operator()(const mt::Point& point)
+    {
+        return ur_kin::point_to_transform(point);
+    }
+};
+
+struct IKSolutionIsEmpty
+{
+    __device__ __host__ 
+    bool operator()(const IKSolution& sol)
+    {
+        return (sol.num_solutions == 0);
+    }
+};
+
+__host__ 
+size_t run_ik_solver(const thrust::device_vector<mt::Matrix4f>& poses_dev, thrust::device_vector<IKSolution>& ik_solutions_dev)
+{
+    size_t N = poses_dev.size(); 
+    RunIKOp ikOp;
+    thrust::transform(thrust::device, poses_dev.begin(), poses_dev.end(), ik_solutions_dev.begin(), ikOp);
+    CUDA_ASSERT(cudaGetLastError());
+
+    thrust::remove_if(thrust::device, ik_solutions_dev.begin(), ik_solutions_dev.end(), IKSolutionIsEmpty());
+    CUDA_ASSERT(cudaGetLastError());
+
+    N = ik_solutions_dev.size();
+    return N;
+}
+
+__host__
+size_t run_ik_solver(const thrust::device_vector<mt::Point>& points_dev, thrust::device_vector<IKSolution>& ik_solutions_dev)
+{
+    size_t N = points_dev.size(); 
+    
+    PointToMatOp pmOp;
+    thrust::device_vector<mt::Matrix4f> forward_transforms_dev(N);
+    thrust::transform(thrust::device, points_dev.begin(), points_dev.end(), 
+                      forward_transforms_dev.begin(), pmOp);
+    CUDA_ASSERT(cudaGetLastError());
+    
+    return run_ik_solver(forward_transforms_dev, ik_solutions_dev);
+}
+
+struct ExtractStateByStatus 
+{
+    unsigned char stat;
+
+    __device__ __host__ 
+    ExtractStateByStatus(unsigned char stat): stat(stat) {}
+
+    __device__ __host__
+    mt::State operator()(const IKSolution& sol)
+    {
+        int idx = sol.get_idx_of_status(stat);
+        mt::State out = idx > -1 ? sol.get_state(idx) : mt::State(infty());
+        return out;
+    }
+};
+
+__host__
+void extract_trajectory_by_status(unsigned char status, thrust::device_vector<IKSolution>& ik_solutions_dev, thrust::device_vector<mt::State>& states_dev)
+{
+    ExtractStateByStatus op(status);
+    thrust::transform(thrust::device, ik_solutions_dev.begin(), ik_solutions_dev.end(), states_dev.begin(), op);
+}
+
+struct ManipulabilityOfState 
+{
+    __device__ __host__
+    float operator()(const mt::State& s)
+    {
+        float tm, rm;
+        ur_kin::compute_manipulability(s, tm, rm);
+        return tm;
+    }
+};
+
+__host__
+void get_manip_of_trajectory(thrust::device_vector<mt::State>& states_dev, thrust::device_vector<float>& mv_dev)
+{
+    ManipulabilityOfState op;
+    thrust::transform(thrust::device, states_dev.begin(), states_dev.end(), mv_dev.begin(), op);
+}
+
+
+struct ComputeTransitionMatrixOp : public thrust::binary_function<IKSolution, IKSolution, mt::Matrix<8,8>>
+{
+    float max_dist;
+
+    __device__ __host__ 
+    ComputeTransitionMatrixOp(float md): max_dist(md) {}
+
+    __device__ __host__
+    mt::Matrix<8, 8> operator()(const IKSolution& from, const IKSolution& to)
+    {
+        mt::Matrix<8, 8> out(infty());
+
+        for (size_t i = 0; i < from.num_solutions; ++i)
+        {
+            for (size_t j = 0; j < to.num_solutions; ++j)
+            {
+                mt::State s_from = from.get_state(i);
+                mt::State s_to = to.get_state(j);
+                
+                //bool same_status = from.status[i] == to.status[j];
+                
+                mt::State dA = s_to - s_from;
+                mt::Matrix<6, 6> m = mt::identity<6, 6>();
+                m.data[0 * 6 + 0] = 16.f;
+                m.data[1 * 6 + 1] = 4.f;
+                m.data[2 * 6 + 2] = 4.f;
+                float dist = dA.dot(m * dA);
+
+                if (dist < max_dist)
+                {
+                    float mf = from.manipulability.data[i];
+                    float mt = to.manipulability.data[j];
+                    float m = thrust::min(mf, mt);
+
+                    out.data[i * 8 + j] = m;
+                    out.data[j * 8 + i] = m;
+                } 
+            }
+        }
+        return out;
+    }
+
+    __device__ __host__
+    mt::Matrix<8, 8> operator()(const thrust::tuple<IKSolution, IKSolution>& p)
+    {
+        return (*this)(thrust::get<0>(p), thrust::get<1>(p));
+    }
+};
+
+__host__
+void compute_transition_matricies(thrust::device_vector<IKSolution>& ik_solutions_dev, thrust::device_vector<mt::Matrix<8, 8>>& tms_dev)
+{
+    thrust::device_vector<IKSolution>::iterator fst_begin = ik_solutions_dev.begin();
+    thrust::device_vector<IKSolution>::iterator fst_end = ik_solutions_dev.end() - 1;
+    thrust::device_vector<IKSolution>::iterator snd_begin = ik_solutions_dev.begin() + 1;
+    thrust::device_vector<IKSolution>::iterator snd_end = ik_solutions_dev.end() - 1;
+    auto zip_begin = thrust::make_zip_iterator(thrust::make_tuple(fst_begin, snd_begin));
+    auto zip_end = thrust::make_zip_iterator(thrust::make_tuple(fst_end, snd_end));
+
+    ComputeTransitionMatrixOp tmOp(30.f);
+    thrust::transform(thrust::device, zip_begin, zip_end, tms_dev.begin(), tmOp);
+    CUDA_ASSERT(cudaGetLastError());
+}
+
+
+struct CombineTransitions : public thrust::binary_function<mt::Matrix<8, 8>, mt::Matrix<8, 8>, mt::Matrix<8, 8>>
+{
+    __device__ __host__ 
+    mt::Matrix<8, 8> operator()(mt::Matrix<8, 8> fst, mt::Matrix<8, 8> snd)
+    {
+        mt::Matrix<8, 8> out(infty());
+
+        for (size_t i = 0; i < 8; ++i)
+        {
+            for (size_t j = 0; j < 8; ++j)
+            {
+                float max_ikj = -infty();
+
+                for (size_t k = 0; k < 8; ++k)
+                {
+                    bool f1 = fst.data[i * 8 + k] < infty();
+                    bool f2 = snd.data[k * 8 + j] < infty();
+                    bool valid_transition = f1 && f2;
+
+                    float min_ik = fst.data[i * 8 + k];
+                    float min_kj = snd.data[k * 8 + j];
+                    float min_ikj = thrust::min(min_ik, min_kj);
+                    
+                    min_ikj = valid_transition ? min_ikj : -infty();
+
+                    max_ikj = thrust::max(min_ikj, max_ikj);
+                }
+
+                out.data[i * 8 + j] = max_ikj > -infty() ? max_ikj : infty();
+            }
+        }
+        return out;
+    }
+};
+
+struct StateTransition
+{
+    int transitions[8];
+    float value[8];
+
+    __device__ __host__
+    StateTransition()
+    {
+        memset(transitions, -1, sizeof(int) * 8);
+        memset(value, -1.f, sizeof(float) * 8);
+    }
+
+
+    __device__ __host__
+    int max_idx() const
+    {
+        int idx = 0;
+        float max_val = value[0];
+        for (int i = 0; i < 8; ++i)
+        {
+            if (value[i] > max_val)
+            {
+                max_val = value[i];
+                idx = i;
+            }
+        }
+        return idx;
+    }
+};
+
+__host__
+std::ostream& operator<<(std::ostream& os, const StateTransition& st)
+{
+    for (int i = 0; i < 8; ++i)
+    {
+        if (st.value[i] > -infty())
+        {
+            if (i > 0)
+            {
+                os << ", ";
+            }
+            os << i << ": [from " << st.transitions[i] << ", min val: " << st.value[i]  << "]";
+        }
+
+    }
+    return os;
+}
+
+
+struct FilterTransitions : public thrust::unary_function<mt::Matrix<8, 8>, StateTransition>
+{
+    __device__ __host__
+    StateTransition operator()(const mt::Matrix<8, 8>& tm)
+    {
+        StateTransition st; 
+        for (size_t i = 0; i < 8; ++i)
+        {
+            float max_x = -infty();
+            int max_idx = -1;
+            for (size_t j = 0; j < 8; ++j)
+            {
+                float x = tm.data[i * 8 + j];
+                if (x < infty())
+                {
+                    if (x > max_x)
+                    {
+                        max_x = x;
+                        max_idx = j;
+                    }
+                }
+            }
+            st.transitions[i] = max_idx;
+            st.value[i] = max_x;
+        }
+        return st;
+    }
+};
+
+__host__
+void backtrack(const thrust::host_vector<StateTransition>& transitions, thrust::host_vector<int>& indices)
+{
+    std::cout << "transitions size: " << transitions.size() << "\n";
+
+    auto it = transitions.rbegin();
+    int idx = (*it).max_idx();
+    if (idx < 0)
+    {
+        std::cout << "backtrack: start idx " << idx << " is invalid, backtracking failed\n";
+        return;
+    }
+
+    thrust::host_vector<int> tmp;
+    while (it != transitions.rend())
+    {
+        tmp.push_back(idx);
+        if (idx < 0 || idx > 8)
+        {
+            return;
+        }
+        idx = (*it).transitions[idx];
+        it++;
+    }
+    tmp.push_back(idx); // index of zeroth ik_solution!
+    thrust::copy(tmp.rbegin(), tmp.rend(), indices.begin());
+}
+
+__host__ 
+void run_algo_on_states(const thrust::host_vector<mt::State>& states, thrust::host_vector<mt::State>& solution)
+{
+    size_t N = states.size();
+    thrust::device_vector<mt::State> states_dev = states;
+    thrust::device_vector<mt::Matrix4f> poses_dev(N);
+    run_fk_solver(states, poses_dev);
+    
+    thrust::device_vector<IKSolution> ik_solutions_dev(N);
+    N = run_ik_solver(poses_dev, ik_solutions_dev);
+    std::cout << "Remaining points: " << N << "\n";
+
+
+    // thrust::device_vector<mt::State> solution_dev(N);
+    // extract_trajectory_by_status(1, ik_solutions_dev, solution_dev);
+
+    // solution = solution_dev;
+
+    // {
+    //     thrust::device_vector<mt::Matrix4f> sol_poses_dev(N);
+    //     run_fk_solver(solution_dev, sol_poses_dev);
+    //     thrust::device_vector<mt::Matrix4f> sol_poses = sol_poses_dev;
+
+    //     thrust::device_vector<mt::Matrix4f> poses = poses_dev;
+
+    //     for (size_t i = 0; i < N; ++i)
+    //     {
+    //         mt::Point x = mt::affine_to_point(poses[i]);
+    //         mt::Point y = mt::affine_to_point(sol_poses[i]); 
+
+    //         std::cout << x << "  ::::::    " << y << "\n\n";
+    //     }
+    // }
+
+    std::cout << "compute transition matricies\n";
+
+    thrust::device_vector<mt::Matrix<8, 8>> tms_dev(N-1);
+    compute_transition_matricies(ik_solutions_dev, tms_dev);
+
+    std::cout << "run prefix sum\n";
+
+    thrust::device_vector<mt::Matrix<8, 8>> scanned_dev(N-1);
+    CombineTransitions ctOp;
+    thrust::inclusive_scan(thrust::device, tms_dev.begin(), tms_dev.end(), scanned_dev.begin(), ctOp);
+        
+    {
+        thrust::host_vector<mt::Matrix<8, 8>> scanned = scanned_dev;
+        for (auto it = scanned.begin(); it != scanned.end(); ++it)
+        {
+            std::cout << *it << "\n";
+        }
+    }
+
+    std::cout << "filter solutions\n";
+
+    FilterTransitions fOp;
+    thrust::device_vector<StateTransition> transition_dev(N-1);
+    thrust::transform(thrust::device, scanned_dev.begin(), scanned_dev.end(), transition_dev.begin(), fOp);
+
+    {
+        thrust::host_vector<StateTransition> transitions = transition_dev;
+        for (auto it = transitions.begin(); it != transitions.end(); ++it)
+        {
+            std::cout << *it << "\n";
+        }
+    }
+
+
+    std::cout << "start backtracking\n";
+
+    thrust::host_vector<StateTransition> transitions = transition_dev;
+    thrust::host_vector<int> indices;
+    backtrack(transitions, indices);
+
+    std::cout << "backtracking finished\n";
+
+    if (indices.size() < N)
+    {
+        return;
+    }
+
+    thrust::host_vector<IKSolution> ik_solutions = ik_solutions_dev;
+    for (size_t i = 0; i < N; ++i)
+    {
+        int idx = indices[i];
+        mt::State s = ik_solutions[i].get_state(idx);
+        solution.push_back(s);
+        //std::cout << s << "\n";
+    }
+    std::cout << solution.size() << "\n";
+    std::cout << N << "\n";
+}
+
+
+
+} // namespace
