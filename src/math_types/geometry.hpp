@@ -1,9 +1,11 @@
 #ifndef LIBCUMANIP_GEOMETRY_H
 #define LIBCUMANIP_GEOMETRY_H 
 
-#include "Vector.h"
-#include "Matrix.h"
+#include "vector.hpp"
+#include "matrix.hpp"
 
+namespace cumanip
+{
 namespace mt 
 {
 
@@ -266,5 +268,6 @@ State state_from_deg(float a1, float a2, float a3, float a4, float a5, float a6)
 
 
 
+} // namespace
 } // namespace
 #endif

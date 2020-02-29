@@ -19,9 +19,8 @@
 #define __device__ 
 #endif
 
-//#include "Matrix.h"
-
-
+namespace cumanip 
+{
 namespace mt 
 {
 
@@ -46,6 +45,7 @@ struct Vector
     __host__ __device__ Vector() {};
     __host__ __device__ explicit Vector(float val); 
     __host__ __device__ explicit Vector(float* val);
+    __host__ __device__ Vector(const Vector<Len>& rhs);
 
     __host__ __device__ size_t size() { return Len; }
     
@@ -64,6 +64,9 @@ struct Vector
 
     __host__ __device__ float max() const;
     __host__ __device__ float min() const;
+
+    __host__ __device__ float max(size_t& idx) const;
+    __host__ __device__ float min(size_t& idx) const;
 
     float data[Len];
 };
@@ -101,8 +104,6 @@ __host__ __device__ inline Vector<Len1 + Len2> cat(const Vector<Len1>& rhs, cons
 
 template <size_t Len>
 __host__ __device__ inline void printVec(const Vector<Len>& vec, const char* fmt = "%f ");
-
-
 
 
 
@@ -153,6 +154,39 @@ float Vector<Len>::min() const
 
 template <size_t Len> 
 __host__ __device__ 
+float Vector<Len>::max(size_t& idx) const 
+{
+    float v = data[0];
+    for (size_t i = 0; i < Len; ++i)
+    {
+        if (data[i] > v)
+        {
+            v = data[i];
+            idx = i; 
+        }
+    }
+    return v;
+}
+
+template <size_t Len> 
+__host__ __device__ 
+float Vector<Len>::min(size_t& idx) const 
+{
+    float v = data[0];
+    for (size_t i = 0; i < Len; ++i)
+    {
+        if (data[i] < v)
+        {
+            v = data[i];
+            idx = i;
+        }
+    }
+    return v;
+}
+
+
+template <size_t Len> 
+__host__ __device__ 
 Vector<Len>::Vector(float val)
 {
     for (size_t i = 0; i < Len; ++i) 
@@ -161,10 +195,28 @@ Vector<Len>::Vector(float val)
 
 template <size_t Len> 
 __host__ __device__ 
-Vector<Len>& Vector<Len>::operator=(const Vector<Len>& rhs)
+Vector<Len>::Vector(const Vector<Len>& rhs)
 {
     for (size_t i = 0; i < Len; ++i)
+    {
         data[i] = rhs.data[i];
+    }
+}
+
+
+template <size_t Len> 
+__host__ __device__ 
+Vector<Len>& Vector<Len>::operator=(const Vector<Len>& rhs)
+{
+    if (this == &rhs)
+    {
+        return *this;
+    }
+
+    for (size_t i = 0; i < Len; ++i)
+    {
+        data[i] = rhs.data[i];
+    }
     return *this;
 }
 
@@ -414,6 +466,6 @@ void coeffs_vec3f(const Vector3f& vec, float& x, float& y, float& z)
     z = vec.data[2];
 }
 
-
 } // namespace mt
+} // namespace cumanip
 #endif

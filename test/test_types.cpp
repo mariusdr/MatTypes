@@ -2,7 +2,9 @@
 #include <type_traits>
 #include <tuple>
 
-#include "../src/Types.hpp"
+#include "../src/types.hpp"
+
+using namespace cumanip;
 
 
 template <typename T>

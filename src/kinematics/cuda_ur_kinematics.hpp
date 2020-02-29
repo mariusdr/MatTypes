@@ -1,10 +1,15 @@
-#ifndef UR_KINEMATICS_HPP
-#define UR_KINEMATICS_HPP
+#ifndef LIBCUMANIP_KINEMATICS_CUDA_UR_KINEMATICS_HPP
+#define LIBCUMANIP_KINEMATICS_CUDA_UR_KINEMATICS_HPP
 
-#define _USE_MATH_DEFINES
-#include <math.h>
+#include "../types.hpp"
 
-#include "Types.hpp"
+#ifndef __host__
+#define __host__
+#endif
+
+#ifndef __device__
+#define __device__
+#endif
 
 #ifndef UR5_PARAMS
 #define UR5_PARAMS
@@ -19,200 +24,15 @@ const double d5 =  0.09465;
 const double d6 =  0.0823;
 #endif
 
-
-namespace ur_kin 
-{
-
 #define ZERO_THRESH 0.00000001 // this was from before i changed doubles to floats
 #define SIGN(x) ( ( (x) > 0 ) - ( (x) < 0 ) )
 #define PI M_PI
 
 
-__device__ __host__ inline void forward(const float* q, float* T);
-__device__ __host__ inline int backward(const float* T, float* q, unsigned char* status, float q6_des);
-__device__ __host__ inline void forward_all(const float* q, float* T1, float* T2, float* T3, float* T4, float* T5, float* T6);
-
-
-
-__device__ __host__ inline
-void status_to_str(unsigned char status, char* str)
+namespace cumanip 
 {
-    unsigned char i = status & 0x04;
-    unsigned char j = status & 0x02;
-    unsigned char k = status & 0x01;
-
-    const char* shoulder = (i == 0) ? "left" : "right";
-    const char* wrist = (j == 0) ? "up" : "down";
-    const char* elbow = (k == 0) ? "up" : "down";
-
-    sprintf(str, "shoulder %s, wrist %s, elbow %s\n", shoulder, wrist, elbow);
-}
-
-__device__ __host__ inline
-void print_status(unsigned char status)
+namespace ur_kin
 {
-    unsigned char i = status & 0x04;
-    unsigned char j = status & 0x02;
-    unsigned char k = status & 0x01;
-
-    const char* shoulder = (i == 0) ? "left" : "right";
-    const char* wrist = (j == 0) ? "up" : "down";
-    const char* elbow = (k == 0) ? "up" : "down";
-
-    printf("shoulder %s, wrist %s, elbow %s\n", shoulder, wrist, elbow);
-}
-
-
-__device__ __host__ inline 
-mt::Matrix4f base_to_zeroth_link()
-{
-    mt::Matrix4f t;
-    t.set_row(0, mt::vec4f(-1, 0, 0, 0));
-    t.set_row(1, mt::vec4f(0, -1, 0, 0));
-    t.set_row(2, mt::vec4f(0, 0, 1, 0));
-    t.set_row(3, mt::vec4f(0, 0, 0, 1));
-    return t;
-}
-
-__device__ __host__ inline 
-mt::Matrix4f sixth_to_ee_link()
-{
-    mt::Matrix4f t;
-    t.set_row(0, mt::vec4f(0, -1, 0, 0));
-    t.set_row(1, mt::vec4f(0, 0, -1, 0));
-    t.set_row(2, mt::vec4f(1, 0, 0, 0));
-    t.set_row(3, mt::vec4f(0, 0, 0, 1));
-    return t;
-}
-
-__device__ __host__ inline
-mt::Matrix4f ee_to_sixth_link()
-{
-    mt::Matrix4f t;
-    t.set_row(0, mt::vec4f(0, 0, 1, 0));
-    t.set_row(1, mt::vec4f(-1, 0, 0, 0));
-    t.set_row(2, mt::vec4f(0, -1, 0, 0));
-    t.set_row(3, mt::vec4f(0, 0, 0, 1));
-    return t;
-}
-
-__device__ __host__ inline 
-mt::Matrix4f solveFK(mt::State state)
-{
-    mt::Matrix4f fwd(0.f);
-    forward(state.data, fwd.data);
-
-    fwd = fwd * base_to_zeroth_link();
-    return fwd;
-}
-
-
-__device__ __host__ inline 
-void solveFKAll(const mt::State& state, mt::Matrix4f& t1, mt::Matrix4f& t2, mt::Matrix4f& t3, mt::Matrix4f& t4, mt::Matrix4f& t5, mt::Matrix4f& t6)
-{
-    forward_all(state.data, t1.data, t2.data, t3.data, t4.data, t5.data, t6.data);
-    t1 = t1 * base_to_zeroth_link();
-    t2 = t2 * base_to_zeroth_link();
-    t3 = t3 * base_to_zeroth_link();
-    t4 = t4 * base_to_zeroth_link();
-    t5 = t5 * base_to_zeroth_link();
-    t6 = t6 * base_to_zeroth_link();
-}
-
-
-__device__ __host__ inline
-int solveIK(const mt::Matrix4f& T, mt::Matrix<8, 6>& solutions, unsigned char* status, float q6_des)
-{
-    solutions = mt::m_zeros<8, 6>(); 
-    int num_sols = backward(T.data, solutions.data, status, q6_des);
-    return num_sols;
-}
-
-__device__ __host__ inline 
-mt::Matrix<6, 6> compute_jacobian(const mt::State& state)
-{
-    mt::Matrix<6, 6> jacobian;
-
-    mt::Matrix4f T1, T2, T3, T4, T5, T6;
-    forward_all(state.data, T1.data, T2.data, T3.data, T4.data, T5.data, T6.data);
-
-    mt::Matrix4f T_ee = T6 * sixth_to_ee_link();
-    mt::Vector3f p_ee = mt::translation(T_ee);
-
-    mt::Vector3f p0 = mt::vec3f(0.f, 0.f, 0.f);
-    mt::Vector3f p1 = mt::translation(T1);
-    mt::Vector3f p2 = mt::translation(T2);
-    mt::Vector3f p3 = mt::translation(T3);
-    mt::Vector3f p4 = mt::translation(T4);
-    mt::Vector3f p5 = mt::translation(T5);
-
-    mt::Vector3f z0 = mt::vec3f(0.f, 0.f, 1.f);
-    mt::Vector3f z1 = mt::rotation(T1) * z0;
-    mt::Vector3f z2 = mt::rotation(T2) * z0;
-    mt::Vector3f z3 = mt::rotation(T3) * z0;
-    mt::Vector3f z4 = mt::rotation(T4) * z0;
-    mt::Vector3f z5 = mt::rotation(T5) * z0;
-
-    mt::Vector3f Jpos1 = mt::cross(z0, (p_ee - p0));
-    mt::Vector3f Jpos2 = mt::cross(z1, (p_ee - p1));
-    mt::Vector3f Jpos3 = mt::cross(z2, (p_ee - p2));
-    mt::Vector3f Jpos4 = mt::cross(z3, (p_ee - p3));
-    mt::Vector3f Jpos5 = mt::cross(z4, (p_ee - p4));
-    mt::Vector3f Jpos6 = mt::cross(z5, (p_ee - p5));
-
-    mt::Vector3f Jo1 = z0;
-    mt::Vector3f Jo2 = z1;
-    mt::Vector3f Jo3 = z2;
-    mt::Vector3f Jo4 = z3;
-    mt::Vector3f Jo5 = z4;
-    mt::Vector3f Jo6 = z5;
-
-    jacobian.data[0 * 6 + 0] = Jpos1.data[0];
-    jacobian.data[1 * 6 + 0] = Jpos1.data[1];
-    jacobian.data[2 * 6 + 0] = Jpos1.data[2];
-    jacobian.data[3 * 6 + 0] =   Jo1.data[0];
-    jacobian.data[4 * 6 + 0] =   Jo1.data[1];
-    jacobian.data[5 * 6 + 0] =   Jo1.data[2];
-
-    jacobian.data[0 * 6 + 1] = Jpos2.data[0];
-    jacobian.data[1 * 6 + 1] = Jpos2.data[1];
-    jacobian.data[2 * 6 + 1] = Jpos2.data[2];
-    jacobian.data[3 * 6 + 1] =   Jo2.data[0];
-    jacobian.data[4 * 6 + 1] =   Jo2.data[1];
-    jacobian.data[5 * 6 + 1] =   Jo2.data[2];
-
-    jacobian.data[0 * 6 + 2] = Jpos3.data[0];
-    jacobian.data[1 * 6 + 2] = Jpos3.data[1];
-    jacobian.data[2 * 6 + 2] = Jpos3.data[2];
-    jacobian.data[3 * 6 + 2] =   Jo3.data[0];
-    jacobian.data[4 * 6 + 2] =   Jo3.data[1];
-    jacobian.data[5 * 6 + 2] =   Jo3.data[2];
-
-    jacobian.data[0 * 6 + 3] = Jpos4.data[0];
-    jacobian.data[1 * 6 + 3] = Jpos4.data[1];
-    jacobian.data[2 * 6 + 3] = Jpos4.data[2];
-    jacobian.data[3 * 6 + 3] =   Jo4.data[0];
-    jacobian.data[4 * 6 + 3] =   Jo4.data[1];
-    jacobian.data[5 * 6 + 3] =   Jo4.data[2];
-
-    jacobian.data[0 * 6 + 4] = Jpos5.data[0];
-    jacobian.data[1 * 6 + 4] = Jpos5.data[1];
-    jacobian.data[2 * 6 + 4] = Jpos5.data[2];
-    jacobian.data[3 * 6 + 4] =   Jo5.data[0];
-    jacobian.data[4 * 6 + 4] =   Jo5.data[1];
-    jacobian.data[5 * 6 + 4] =   Jo5.data[2];
-
-    jacobian.data[0 * 6 + 5] = Jpos6.data[0];
-    jacobian.data[1 * 6 + 5] = Jpos6.data[1];
-    jacobian.data[2 * 6 + 5] = Jpos6.data[2];
-    jacobian.data[3 * 6 + 5] =   Jo6.data[0];
-    jacobian.data[4 * 6 + 5] =   Jo6.data[1];
-    jacobian.data[5 * 6 + 5] =   Jo6.data[2];
-
-    return jacobian;
-}
-
-
 
 __device__ __host__ inline 
 void forward(const float *q, float *T)
@@ -815,5 +635,7 @@ void forward_all(const float *q, float *T1, float *T2, float *T3, float *T4, flo
     }
 }
 
-}; // namespace ur_kin
+
+} // namespace ur_kin
+} // namespace cumanip
 #endif

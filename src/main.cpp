@@ -12,17 +12,22 @@
 #endif
 
 
-#include "Types.hpp"
-#include "kin.h"
-
+#include "types.hpp"
+#include "kinematics.hpp"
 
 int main()
 {
-    mt::State s = mt::state(0.12, 1.23, 0.23, 0.44, -0.22, 1.31);
+    cumanip::mt::State s = cumanip::mt::state(0.12, 1.23, 0.23, 0.44, -0.22, 1.31);
 
-    auto J = ur_kin::compute_jacobian(s);
+    // cumanip::Manipulability algo;
+    // algo.solve(s);
+    // std::cout << algo.trans_manip() << "\n";
+    // std::cout << algo.rot_manip() << "\n";
 
-    std::cout << J << "\n";
+    // cumanip::URKForwardKinematics fk;
+    // fk.solve(s);
+    // std::cout << fk.transform_base_to_ee() << "\n";
 
     return EXIT_SUCCESS;
 }
+
