@@ -1,15 +1,7 @@
 #ifndef LIBCUMANIP_KINEMATICS_CUDA_UR_KINEMATICS_HPP
 #define LIBCUMANIP_KINEMATICS_CUDA_UR_KINEMATICS_HPP
 
-#include "../types.hpp"
-
-#ifndef __host__
-#define __host__
-#endif
-
-#ifndef __device__
-#define __device__
-#endif
+#include "../math_types.hpp"
 
 #ifndef UR5_PARAMS
 #define UR5_PARAMS

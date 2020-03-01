@@ -1,17 +1,9 @@
 #ifndef LIBCUMANIP_KINEMATICS_JACOBIAN_HPP
 #define LIBCUMANIP_KINEMATICS_JACOBIAN_HPP
 
-#include "../types.hpp"
+#include "../math_types.hpp"
 #include "forward_kinematics.hpp"
 
-
-#ifndef __host__
-#define __host__
-#endif
-
-#ifndef __device__
-#define __device__
-#endif
 
 namespace cumanip 
 {

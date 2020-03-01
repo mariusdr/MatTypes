@@ -2,7 +2,9 @@
 #define LIBCUMANIP_KINEMATICS_URK_INVERSE_KINEMATICS_HPP
 
 #include "cuda_ur_kinematics.hpp"
-#include "../types.hpp"
+#include "../math_types.hpp"
+
+#include <cstring>
 
 namespace cumanip
 {
@@ -12,12 +14,42 @@ class URKInverseKinematics
 {
 public:
 
-    __device__ __host__ 
-    int solve(const mt::Matrix4f& T, mt::Matrix<8, 6>& solutions, unsigned char* status, float q6_des)
+    __device__ __host__
+    URKInverseKinematics(): number_of_solutions(0), solutions(mt::Matrix<8, 6>(0.f)) 
     {
-        solutions = mt::m_zeros<8, 6>(); 
-        int num_sols = ur_kin::backward(T.data, solutions.data, status, q6_des);
-        return num_sols;
+        memset(status, 0, sizeof(unsigned char) * 8);
+    }
+
+    __device__ __host__ 
+    int solve(const mt::Matrix4f& T, float q6_des)
+    {
+        number_of_solutions = ur_kin::backward(T.data, solutions.data, status, q6_des);
+        return number_of_solutions;
+    }
+
+    __device__ __host__ 
+    int solve(const mt::Matrix4f& T)
+    {
+        number_of_solutions = ur_kin::backward(T.data, solutions.data, status, 0.f);
+        return number_of_solutions;
+    }
+
+    __device__ __host__
+    int get_number_of_solutions() const 
+    {
+        return number_of_solutions;
+    }
+
+    __device__ __host__ 
+    mt::Matrix<8, 6> get_solutions() const 
+    {
+        return solutions;
+    }
+
+    __device__ __host__
+    unsigned char* get_status() 
+    {
+        return status;
     }
 
     __device__ __host__ 
@@ -35,7 +67,10 @@ public:
     }
 
 private:
-        
+    int number_of_solutions;
+    mt::Matrix<8, 6> solutions;
+    unsigned char status[8];
+
 };
 
 

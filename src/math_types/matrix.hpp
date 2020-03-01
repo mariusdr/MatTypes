@@ -13,15 +13,6 @@
 #include <cmath>
 
 
-#ifndef __host__ 
-#define __host__
-#endif
-
-#ifndef __device__ 
-#define __device__
-#endif
-
-
 namespace cumanip
 {
 namespace mt 
@@ -51,6 +42,7 @@ struct Matrix
     __host__ __device__ Matrix() {};
     __host__ __device__ explicit Matrix(float val);
     __host__ __device__ explicit Matrix(float* val);
+    __host__ __device__ Matrix(const Matrix<Rows, Cols>& rhs);
 
     __host__ __device__ size_t rows() const { return Rows; }
     __host__ __device__ size_t cols() const { return Cols; }
@@ -142,6 +134,15 @@ __host__ inline std::ostream& operator<<(std::ostream& os, const Matrix<Rows, Co
 // Impl                                                                                                             //
 //==================================================================================================================//
 
+template <size_t Rows, size_t Cols>
+__host__ __device__ 
+Matrix<Rows, Cols>::Matrix(const Matrix<Rows, Cols>& rhs)
+{
+    for (size_t i = 0; i < Rows * Cols; ++i)
+    {
+        data[i] = rhs.data[i];
+    }
+}
 
 
 template <size_t Rows, size_t Cols>

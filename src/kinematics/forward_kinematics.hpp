@@ -2,7 +2,7 @@
 #define LIBCUMANIP_KINEMATICS_FORWARD_KINEMATICS_HPP
 
 #include "cuda_ur_kinematics.hpp"
-#include "../types.hpp"
+#include "../math_types.hpp"
 
 namespace cumanip
 {

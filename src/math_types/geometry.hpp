@@ -9,10 +9,6 @@ namespace cumanip
 namespace mt 
 {
 
-__host__ __device__ inline Matrix4f affine(const Matrix3f& rot, const Vector3f& trans);
-__host__ __device__ inline Matrix3f rotation(const Matrix4f& affine);
-__host__ __device__ inline Vector3f translation(const Matrix4f& affine);
-
 __host__ __device__ inline Matrix3f from_roll(float a);
 __host__ __device__ inline Matrix3f from_pitch(float a);
 __host__ __device__ inline Matrix3f from_yaw(float a);
@@ -42,6 +38,12 @@ template <size_t Len>
 __host__ __device__ inline Vector<Len> rad_to_deg(const Vector<Len>& rhs);
 
 __host__ __device__ inline State state_from_deg(float a1, float a2, float a3, float a4, float a5, float a6);
+
+template <size_t Len> 
+__host__ __device__ inline float distance(const Matrix<Len, Len>& weights, const Vector<Len>& fst, const Vector<Len>& snd);
+
+template <size_t Len> 
+__host__ __device__ inline float distance(const Vector<Len>& fst, const Vector<Len>& snd);
 
 //==================================================================================================================//
 // Impl                                                                                                             //
@@ -98,38 +100,6 @@ __host__ __device__ inline
 Matrix3f fromYPR(Vector3f ypr)
 {
     return fromYPR(ypr.data[0], ypr.data[1], ypr.data[2]);
-}
-
-__host__ __device__ inline 
-Matrix3f rotation(const Matrix4f& affine)
-{
-    Vector4f r1 = affine.get_row(0);
-    Vector4f r2 = affine.get_row(1);
-    Vector4f r3 = affine.get_row(2);
-    return mat3f_rows(
-        vec3f(r1.data[0], r1.data[1], r1.data[2]),
-        vec3f(r2.data[0], r2.data[1], r2.data[2]),
-        vec3f(r3.data[0], r3.data[1], r3.data[2])
-    );
-}
-
-__host__ __device__ inline 
-Vector3f translation(const Matrix4f& affine)
-{
-    Vector4f r1 = affine.get_row(0);
-    Vector4f r2 = affine.get_row(1);
-    Vector4f r3 = affine.get_row(2);
-    return vec3f(r1.data[3], r2.data[3], r3.data[3]);
-}
-
-__host__ __device__ inline 
-Matrix4f affine(const Matrix3f& rot, const Vector3f& trans)
-{
-    Vector4f r1 = cat(rot.get_row(0), trans.data[0]);
-    Vector4f r2 = cat(rot.get_row(1), trans.data[1]);
-    Vector4f r3 = cat(rot.get_row(2), trans.data[2]);
-    Vector4f r4 = vec4f(0.f, 0.f, 0.f, 1.f);
-    return mat4f_rows(r1, r2, r3, r4);
 }
 
 // from https://github.com/fzi-forschungszentrum-informatik/gpu-voxels/blob/master/packages/gpu_voxels/src/gpu_voxels/helpers/cuda_matrices.h
@@ -265,7 +235,21 @@ State state_from_deg(float a1, float a2, float a3, float a4, float a5, float a6)
     return deg_to_rad(state(a1, a2, a3, a4, a5, a6));
 }
 
+template <size_t Len> 
+__host__ __device__ inline 
+float distance(const Matrix<Len, Len>& weights, const Vector<Len>& fst, const Vector<Len>& snd)
+{
+    Vector<Len> delta = fst - snd;
+    return sqrtf(delta.dot(weights * delta));
+}
 
+template <size_t Len> 
+__host__ __device__ inline 
+float distance(const Vector<Len>& fst, const Vector<Len>& snd)
+{
+    Vector<Len> delta = fst - snd;
+    return sqrtf(delta.dot(delta));
+}
 
 
 } // namespace
