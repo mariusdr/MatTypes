@@ -11,7 +11,11 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <initializer_list>
 
+#ifndef CHECK_BOUNDS
+#define CHECK_BOUNDS
+#endif
 
 namespace cumanip
 {
@@ -44,9 +48,17 @@ struct Matrix
     __host__ __device__ explicit Matrix(float* val);
     __host__ __device__ Matrix(const Matrix<Rows, Cols>& rhs);
 
+    __host__ Matrix(std::initializer_list<float> l);
+
+    __host__ __device__ float& at(size_t i, size_t j);
+    __host__ __device__ const float& at(size_t i, size_t j) const;
+
     __host__ __device__ size_t rows() const { return Rows; }
     __host__ __device__ size_t cols() const { return Cols; }
     __host__ __device__ size_t size() const { return Rows * Cols; };
+
+    __host__ __device__ size_t row_rank() const;
+    __host__ __device__ size_t col_rank() const;
 
     __host__ __device__ Matrix<Rows, Cols>& operator=(const Matrix<Rows, Cols>& rhs);
 
@@ -73,7 +85,10 @@ struct Matrix
     __host__ __device__ int nz_count(float eps=0.00000001) const;
 
     __host__ __device__ Matrix<Rows, Cols> replace(float x, float y, float eps=0.00000001) const;
-    
+
+    __host__ __device__ Matrix<Rows - 1, Cols> drop_row(size_t i) const;
+    __host__ __device__ Matrix<Rows - 1, Cols> drop_last_row() const;
+
     float data[Rows * Cols];
 };
 
@@ -659,6 +674,121 @@ float Matrix<Rows, Cols>::min(size_t& i, size_t& j) const
     return minv;
 }
 
+template <size_t Rows, size_t Cols>
+__host__ __device__ 
+float& Matrix<Rows, Cols>::at(size_t i, size_t j)
+{
+#ifdef CHECK_BOUNDS
+    if (i >= Rows || j >= Cols)
+    {
+        throw std::runtime_error("matrix index out of bounds");
+    }
+#endif
+
+    return data[i * Cols + j];
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ 
+const float& Matrix<Rows, Cols>::at(size_t i, size_t j) const
+{
+#ifdef CHECK_BOUNDS
+    if (i >= Rows || j >= Cols)
+    {
+        throw std::runtime_error("matrix index out of bounds");
+    }
+#endif
+    return data[i * Cols + j];
+}
+
+constexpr size_t min_ce(size_t A, size_t B)
+{
+    return A < B ? A : B;
+}
+
+template <size_t RowsTo, size_t ColsTo, size_t RowsFrom, size_t ColsFrom>
+__host__ __device__ inline 
+Matrix<min_ce(RowsTo, RowsFrom), min_ce(ColsTo, ColsFrom)> block(const Matrix<RowsFrom, ColsFrom>& mat)
+{
+    constexpr size_t Rows = min_ce(RowsTo, RowsFrom);
+    constexpr size_t Cols = min_ce(ColsTo, ColsFrom);
+
+    Matrix<Rows, Cols> out(0.f);
+    for (size_t i = 0; i < Rows; ++i)
+    {
+        for (size_t j = 0; j < Cols; ++j)
+        {
+            out.data[i * Cols + j] = mat.data[i * Cols + j];
+        }
+    }
+    return out;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ Matrix<Rows, Cols>::Matrix(std::initializer_list<float> l)
+{
+    size_t idx = 0;
+    for (auto it = l.begin(); it != l.end(); ++it)
+    {
+        data[idx++] = *it;
+    }
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ 
+size_t Matrix<Rows, Cols>::row_rank() const
+{
+    size_t rank = 0;
+    for (size_t i = 0; i < Rows; ++i)
+    {
+        Vector<Cols> row = get_row(i);
+        if (!row.is_zero())
+        {
+            rank += 1;
+        }
+    }
+    return rank;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ 
+size_t Matrix<Rows, Cols>::col_rank() const
+{
+    size_t rank = 0;
+    for (size_t i = 0; i < Cols; ++i)
+    {
+        if (!get_col(i).is_zero())
+        {
+            rank++;
+        }
+    }
+    return rank;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ 
+Matrix<Rows - 1, Cols> Matrix<Rows, Cols>::drop_row(size_t row_idx) const
+{
+    Matrix<Rows - 1, Cols> out;
+    for (size_t i = 0; i < row_idx; ++i)
+    {
+        out.set_row(i, get_row(i));
+    }
+
+    for (size_t i = row_idx + 1; i < Rows; ++i)
+    {
+        out.set_row(i, get_row(i));
+    }
+
+    return out;
+}
+
+template <size_t Rows, size_t Cols>
+__host__ __device__ 
+Matrix<Rows - 1, Cols> Matrix<Rows, Cols>::drop_last_row() const
+{
+    return drop_row(Rows - 1);
+}
 
 
 } // namespace mt

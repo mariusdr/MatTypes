@@ -11,6 +11,11 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <initializer_list>
+
+#ifndef CHECK_BOUNDS
+#define CHECK_BOUNDS
+#endif
 
 namespace cumanip 
 {
@@ -40,8 +45,15 @@ struct Vector
     __host__ __device__ explicit Vector(float* val);
     __host__ __device__ Vector(const Vector<Len>& rhs);
 
+    __host__ Vector(std::initializer_list<float> l);
+
+    __host__ __device__ float& at(size_t i);
+    __host__ __device__ const float& at(size_t i) const;
+
     __host__ __device__ size_t size() { return Len; }
-    
+
+    __host__ __device__ bool is_zero() const;
+
     __host__ __device__ Vector<Len>& operator=(const Vector<Len>& rhs);
     __host__ __device__ Vector<Len> operator+(const Vector<Len>& rhs) const;
     __host__ __device__ Vector<Len> operator-(const Vector<Len>& rhs) const;
@@ -458,6 +470,61 @@ void coeffs_vec3f(const Vector3f& vec, float& x, float& y, float& z)
     y = vec.data[1];
     z = vec.data[2];
 }
+
+
+template <size_t Len>
+__host__ __device__ 
+float& Vector<Len>::at(size_t i)
+{
+#ifdef CHECK_BOUNDS
+    if (i >= Len)
+    {
+        std::cout << i << "\n";
+        throw std::runtime_error("vector index out of bounds");
+    }
+#endif
+    return data[i];
+}
+
+template <size_t Len>
+__host__ __device__ 
+const float& Vector<Len>::at(size_t i) const
+{
+#ifdef CHECK_BOUNDS
+    if (i >= Len)
+    {
+        throw std::runtime_error("vector index out of bounds");
+    }
+#endif
+    return data[i];
+}
+
+template <size_t Len>
+__host__ 
+Vector<Len>::Vector(std::initializer_list<float> l)
+{
+    size_t idx = 0;
+    for (auto it = l.begin(); it != l.end(); ++it)
+    {
+        data[idx++] = *it;
+    }
+}
+
+template <size_t Len>
+__host__ __device__ 
+bool Vector<Len>::is_zero() const
+{
+    bool v = true;
+    for (size_t i = 0; i < Len; ++i)
+    {
+        if (at(i) > 0.f)
+        {
+            v = false;
+        }
+    }
+    return v;
+}
+
 
 } // namespace mt
 } // namespace cumanip

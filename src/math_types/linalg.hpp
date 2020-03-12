@@ -33,6 +33,9 @@ __host__ __device__ inline float approx_eigenvalue(const Matrix<N, N>& m, size_t
 template <size_t N> 
 __host__ __device__ inline void min_max_eigenvalues(const Matrix<N, N>& m, size_t iterations, float& min_lambda, float& max_lambda);
 
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline float frobenius_norm(const Matrix<Rows, Cols>& mat);
+
 
 //==================================================================================================================//
 // Impl                                                                                                             //
@@ -308,6 +311,22 @@ void min_max_eigenvalues(const Matrix<N, N>& m, size_t iterations, float& min_la
     min_lambda = 1.f / approx_eigenvalue(mi, iterations, tmp);
 }
 
+template <size_t Rows, size_t Cols>
+__host__ __device__ inline 
+float frobenius_norm(const Matrix<Rows, Cols>& mat)
+{
+    float sum = 0.f;
+
+    for (size_t i = 0; i < Rows; ++i)
+    {
+        for (size_t j = 0; j < Cols; ++j)
+        {
+            sum += mat.at(i, j) * mat.at(i, j);
+        }
+    }
+
+    return sqrt(sum);
+}
 
 
 
