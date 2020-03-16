@@ -34,6 +34,18 @@ public:
         return number_of_solutions;
     }
 
+    __device__ __host__ 
+    int solve(const mt::Point& pt, float q6_des)
+    {
+        return solve(mt::point_to_affine(pt), q6_des);
+    }
+
+    __device__ __host__ 
+    int solve(const mt::Point& pt)
+    {
+        return solve(mt::point_to_affine(pt));
+    }
+
     __device__ __host__
     int get_number_of_solutions() const 
     {

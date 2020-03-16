@@ -1,6 +1,11 @@
 #include <iostream>
 #include <iomanip>
 #include <cstdlib>
+#include <fstream>
+#include <functional>
+#include <algorithm>
+#include <vector>
+#include <numeric>
 
 
 #ifndef __host__
@@ -11,51 +16,108 @@
 #define __device__
 #endif
 
-#include "math_types.hpp"
-// #include "kinematics.hpp"
-// #include "forward_kinematics_op.h"
-// #include "inverse_kinematics_op.h"
-// #include "common_op.h"
-// #include "extract_traj_by_status.h"
+#include "thrust_ops/kinematics_ops.hpp"
+#include "thrust_ops/manipulability_ops.hpp"
+#include "thrust_ops/planning_ops.hpp"
+#include "thrust_ops/common_ops.hpp"
 
-#include "math_types/svd.hpp"
-
-#include <vector>
+namespace cumanip
+{
 
 
+std::vector<mt::Point> read_cartesian_path(const std::string& path)
+{
+    std::vector<mt::Point> cart;
+
+    std::ifstream is(path);
+    if (is)
+    {
+        float a, b, c, x, y, z;
+
+        while (is >> a >> b >> c >> x >> y >> z)
+        {
+            mt::Point p = mt::vec6f(x, y, z, a, b, c);
+            cart.push_back(p);
+        }
+    }
+    return cart;
+}
+
+} // ns
 
 
-int main()
+int main(int argc, char** argv)
 {
     using namespace cumanip;
-
     std::cout << std::fixed << std::setprecision(4);
 
-    mt::Matrix<9, 7> mat 
+    if (argc < 2)
     {
-    0.0495,   0.2819,   0.8739,   0.1057,   0.0634,   0.1339,   0.8422,
-    0.4896,   0.5386,   0.2703,   0.1420,   0.8604,   0.0309,   0.5590,
-    0.1925,   0.6952,   0.2085,   0.1665,   0.9344,   0.9391,   0.8541,
-    0.1231,   0.4991,   0.5650,   0.6210,   0.9844,   0.3013,   0.3479,
-    0.2055,   0.5358,   0.6403,   0.5737,   0.8589,   0.2955,   0.4460,
-    0.1465,   0.4452,   0.4170,   0.0521,   0.7856,   0.3329,   0.0542,
-    0.1891,   0.1239,   0.2060,   0.9312,   0.5134,   0.4671,   0.1771,
-    0.0427,   0.4904,   0.9479,   0.7287,   0.1776,   0.6482,   0.6628,
-    0.6352,   0.8530,   0.0821,   0.7378,   0.3986,   0.0252,   0.3308
-    };
+        std::cerr << "No input file provided\n";
+        return EXIT_FAILURE;
+    }
 
+    std::string fp(argv[1]);
+    std::cout << "reading " << fp << "\n";
+    std::vector<mt::Point> cart_path = read_cartesian_path(fp); 
+    std::vector<mt::Matrix<8, 6>> states(cart_path.size());
 
-    mt::SVD<9, 7> svd(mat);    
-    svd.solve();
+    InverseKinematics<1> ik_op;
+    std::transform(cart_path.begin(), cart_path.end(), states.begin(), ik_op);
 
-    std::cout << svd.get_inp() << "\n\n\n";
+    ComputeTransManip<8> mn_op;
+    std::vector<mt::Vector<8>> manips(cart_path.size());
+    std::transform(states.begin(), states.end(), manips.begin(), mn_op);
+
+    ComputeDistanceMatrix<8> dm_op;
+    std::vector<mt::Matrix<8, 8>> dist_mats;
+    {
+        for (size_t i = 0; i < states.size() - 1; ++i)
+        {
+            auto fst = states.at(i);
+            auto snd = states.at(i+1);
+
+            mt::Matrix<8, 8> mat = dm_op(fst, snd);
+            dist_mats.push_back(mat);
+        }
+    }
+
+    {
+        std::vector<float> tmp(dist_mats.size());
+
+        MinMat<8, 8> min_op;
+        std::transform(dist_mats.begin(), dist_mats.end(), tmp.begin(), min_op);
+        float min_dist = *std::min_element(tmp.begin(), tmp.end());
+
+        MaxMat<8, 8> max_op;
+        std::transform(dist_mats.begin(), dist_mats.end(), tmp.begin(), max_op);
+        float max_dist = *std::max_element(tmp.begin(), tmp.end());
+        
+        SumMat<8, 8> sum_op;
+        std::transform(dist_mats.begin(), dist_mats.end(), tmp.begin(), sum_op);
+        float avg_dist = std::accumulate(tmp.begin(), tmp.end(), 0.f) / (64 * std::distance(dist_mats.begin(), dist_mats.end()));
+        
+        std::cout << "min dist: " << min_dist << "\n";
+        std::cout << "max dist: " << max_dist << "\n";
+        std::cout << "avg dist: " << avg_dist << "\n";
+    }
+
+    std::vector<mt::Matrix<8, 8>> tms(dist_mats.size());
+    ComputeTransitionMatrix<8> tm_op(4.f);
+    std::transform(dist_mats.begin(), dist_mats.end(), tms.begin(), tm_op);
+
+    std::vector<mt::Matrix<8, 8>> scanned(dist_mats.size());
+    CombineTransitionMatricies<8> comb_op;
+    scanned[0] = tms[0];
+    for (size_t i = 1; i < dist_mats.size(); ++i)
+    {
+        scanned[i] = comb_op(scanned[i-1], tms[i]);
+    }
     
-    // std::cout << svd.get_u() << "\n\n\n";
-    std::cout << svd.get_s() << "\n\n\n";
-    // std::cout << svd.get_v() << "\n\n\n";
-
-    std::cout << svd.get_s().drop_last_row().drop_last_row() << "\n\n";
-
+    for (auto it = scanned.begin(); it != scanned.end(); ++it)
+    {
+        std::cout << *it << "\n\n";
+    }
 
     return EXIT_SUCCESS;
 }
