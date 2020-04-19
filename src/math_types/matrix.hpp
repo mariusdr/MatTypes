@@ -38,6 +38,7 @@ using Point3 = Vector<3>;
 
 using Matrix3f = Matrix<3, 3>;
 using Matrix4f = Matrix<4, 4>;
+using Matrix8f = Matrix<8, 8>;
 
 
 template <size_t Rows, size_t Cols>

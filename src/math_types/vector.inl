@@ -50,6 +50,7 @@ __host__ __device__
 float Vector<Len>::max(size_t& idx) const 
 {
     float v = data[0];
+    idx = 0;
     for (size_t i = 0; i < Len; ++i)
     {
         if (data[i] > v)
@@ -66,6 +67,7 @@ __host__ __device__
 float Vector<Len>::min(size_t& idx) const 
 {
     float v = data[0];
+    idx = 0;
     for (size_t i = 0; i < Len; ++i)
     {
         if (data[i] < v)

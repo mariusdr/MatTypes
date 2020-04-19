@@ -40,7 +40,7 @@ endif()
 
 
 
-set (SOURCES src/main.cpp)
+set (SOURCES src/main.cpp src/planner_cpu.cpp)
 # set (TEST_FILES test/test_types.cpp test/test_kin.cpp)
 set (TEST_FILES test/test_types.cpp)
 

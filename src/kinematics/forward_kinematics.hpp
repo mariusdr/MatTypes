@@ -116,6 +116,14 @@ public:
         return ee_transform;
     }
 
+    __device__ __host__ 
+    mt::Matrix4f get_inverse_base_transform() const 
+    {
+        mt::Matrix4f inv;
+        mt::invert(base_transform, inv);
+        return inv;
+    }
+
 private:
 
     // transforms from the zeroth (!) to the i-th link

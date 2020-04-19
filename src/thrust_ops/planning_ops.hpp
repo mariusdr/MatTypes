@@ -1,12 +1,12 @@
 #ifndef LIBCUMANIP_PLANNING_OPS_H
 #define LIBCUMANIP_PLANNING_OPS_H
 
+#include <cstddef>
 #include <cstring>
 
 //!
 #include "../math_types.hpp"
 #include "../kinematics.hpp"
-
 #include "../cuda_utils.h"
 //!
 
@@ -15,7 +15,20 @@ namespace cumanip
 {
 
 template <size_t NumStates>
-struct ComputeDistanceMatrix
+struct CollisionDetection
+{
+    using MatrixN = mt::Matrix<NumStates, 6>;
+
+    __host__ __device__
+    MatrixN operator()(const MatrixN& states)
+    {
+        
+    }
+};
+
+
+template <size_t NumStates>
+struct ComputeDistanceMatrix /* : public thrust::binary_function<mt::Matrix<NumStates, 6>, mt::Matrix<NumStates, 6>, mt::Matrix<NumStates, NumStates>>*/
 {
     using InMatrix = mt::Matrix<NumStates, 6>;
     using OutMatrix = mt::Matrix<NumStates, NumStates>;
@@ -56,7 +69,7 @@ struct ComputeDistanceMatrix
 
 
 template <size_t NumStates>
-struct ComputeTransitionMatrix
+struct ComputeTransitionMatrix /*: public thrust::unary_function<mt::Matrix<NumStates, NumStates>, mt::Matrix<NumStates, NumStates>>*/
 {
     using MatrixN = mt::Matrix<NumStates, NumStates>;
 
@@ -84,7 +97,42 @@ struct ComputeTransitionMatrix
 
 
 template <size_t NumStates>
-struct CombineTransitionMatricies
+struct ComputeManipMatricies /* : public thrust::unary_function<thrust::tuple<mt::Vector<NumStates>, mt::Matrix<NumStates, NumStates>, mt::Vector<NumStates>>, mt::Matrix<NumStates, NumStates>>*/
+{
+    using MatrixN = mt::Matrix<NumStates, NumStates>;
+    using VectorN = mt::Vector<NumStates>;
+
+    // using VecMatVec = thrust::tuple<VectorN, MatrixN, VectorN>;
+    using VecMatVec = std::tuple<VectorN, MatrixN, VectorN>;
+
+    __device__ __host__ 
+    MatrixN operator()(const VectorN& manip_from, const MatrixN& tm, const VectorN& manip_to)
+    {
+        MatrixN out(0.f);
+        for (size_t i = 0; i < NumStates; ++i)
+        {
+            for (size_t j = 0; j < NumStates; ++j)
+            {
+                const float& mi = manip_from.at(i);
+                const float& mj = manip_to.at(j);
+                // const float& m = thrust::min(mi, mj);
+                const float& m = std::min(mi, mj);
+                out.at(i, j) = tm.at(i, j) > 0.f ? m : 0.f;
+            }
+        }
+        return out;
+    }
+
+    // __device__ __host__ 
+    // MatrixN operator()(const VecMatVec& vmv)
+    // {
+    //     return (*this)(thrust::get<0>(vmv), thrust::get<1>(vmv), thrust::get<2>(vmv));
+    // }
+};
+
+
+template <size_t NumStates>
+struct CombineManipMatricies /* : public thrust::binary_function<mt::Matrix<NumStates, NumStates>, mt::Matrix<NumStates, NumStates>, mt::Matrix<NumStates, NumStates>>*/
 {
     using MatrixN = mt::Matrix<NumStates, NumStates>;
 
@@ -99,12 +147,61 @@ struct CombineTransitionMatricies
                 float v = 0.f;
                 for (size_t k = 0; k < NumStates; ++k)
                 {
-                    const float& x_ik = fst.at(i, k);
-                    const float& x_kj = snd.at(k, j);
-                    const float& m = x_ik < x_kj ? x_ik : x_kj;
-                    v = v > m ? v : m;
+                    float x_ik = fst.at(i, k);
+                    float x_kj = snd.at(k, j);
+
+                    if (x_ik > 0.f && x_kj > 0.f)
+                    {
+                        // float m = thrust::min(x_ik, x_kj);
+                        // v = thrust::max(v, m);
+                        float m = std::min(x_ik, x_kj);
+                        v = std::max(v, m);
+                    }
                 }
                 out.at(i, j) = v;
+            }
+        }
+        return out;
+    }
+};
+
+template <size_t NumStates>
+struct CombineManipMatriciesTransitions /* : public thrust::binary_function<mt::Matrix<NumStates, NumStates>, mt::Matrix<NumStates, NumStates>, mt::Matrix<NumStates, NumStates>>*/
+{
+    using MatrixN = mt::Matrix<NumStates, NumStates>;
+
+    __device__ __host__ 
+    MatrixN operator()(const MatrixN& fst, const MatrixN& snd)
+    {
+        MatrixN out(-1.f);
+
+        for (size_t i = 0; i < NumStates; ++i)
+        {
+            for (size_t j = 0; j < NumStates; ++j)
+            {
+                float v = 0.f;
+                int max_k = -1;
+
+                for (size_t k = 0; k < NumStates; ++k)
+                {
+                    float x_ik = fst.at(i, k);
+                    float x_kj = snd.at(k, j);
+
+                    if (x_ik > 0.f && x_kj > 0.f)
+                    {
+                        // float m = thrust::min(x_ik, x_kj);
+                        // v = thrust::max(v, m);
+                        float m = std::min(x_ik, x_kj);
+                        
+                        if (m > v)
+                        {
+                            max_k = k;
+                        }
+
+                        v = std::max(v, m);
+                    }
+                }
+                out.at(i, j) = max_k;
             }
         }
         return out;

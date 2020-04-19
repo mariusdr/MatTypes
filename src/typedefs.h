@@ -1,6 +1,7 @@
 #ifndef LIBCUMANIP_TYPEDEFS_H
 #define LIBCUMANIP_TYPEDEFS_H
 
+#include "math_types.hpp"
 #include "kinematics.hpp"
 
 #include <vector>
@@ -8,11 +9,6 @@
 namespace cumanip
 {
 
-using StateTrajectorySTL = std::vector<mt::State>;
-//!
-using StateTrajectoryDev = StateTrajectorySTL;
-using StateTrajectoryHost = StateTrajectorySTL;
-//!
 
 using Point_STLIter = std::vector<mt::Point>::iterator;
 //!

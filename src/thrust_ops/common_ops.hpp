@@ -1,6 +1,7 @@
 #ifndef LIBCUMANIP_COMMON_OPS_H
 #define LIBCUMANIP_COMMON_OPS_H
 
+#include <cstddef>
 #include <cstring>
 
 //!
@@ -74,6 +75,79 @@ struct ApplyLeftTransform
     
     mt::Matrix4f transform;
 };
+
+struct ApplyRightTransformPts
+{
+    ApplyRightTransformPts(mt::Matrix4f t): transform(t) 
+    {}
+
+    __host__ __device__
+    mt::Point operator()(const mt::Point& inp)
+    {
+        return mt::affine_to_point(mt::point_to_affine(inp) * transform);
+    }
+    
+    mt::Matrix4f transform;
+};
+
+struct ApplyLeftTransformPts
+{
+    ApplyLeftTransformPts(mt::Matrix4f t): transform(t) 
+    {}
+
+    __host__ __device__
+    mt::Point operator()(const mt::Point& inp)
+    {
+        return mt::affine_to_point(transform * mt::point_to_affine(inp));
+    }
+    
+    mt::Matrix4f transform;
+};
+
+template <size_t N>
+struct ApplyRightTransformMat
+{
+    ApplyRightTransformMat(mt::Matrix4f t): transform(t) 
+    {}
+
+    __host__ __device__
+    mt::Matrix<N, 6> operator()(const mt::Matrix<N, 6>& inp)
+    {
+        mt::Matrix<N, 6> out;
+        for (size_t i = 0; i < N; ++i)
+        {
+            mt::Point p = inp.get_row(i);
+            p = mt::affine_to_point(mt::point_to_affine(p) * transform);
+            out.set_row(i, p);
+        }
+        return out;
+    }
+    
+    mt::Matrix4f transform;
+};
+
+template <size_t N>
+struct ApplyLeftTransformMat
+{
+    ApplyLeftTransformMat(mt::Matrix4f t): transform(t) 
+    {}
+
+    __host__ __device__
+    mt::Matrix<N, 6> operator()(const mt::Matrix<N, 6>& inp)
+    {
+        mt::Matrix<N, 6> out;
+        for (size_t i = 0; i < N; ++i)
+        {
+            mt::Point p = inp.get_row(i);
+            p = mt::affine_to_point(transform * mt::point_to_affine(p));
+            out.set_row(i, p);
+        }
+        return out;
+    }
+    
+    mt::Matrix4f transform;
+};
+
 
 template <size_t Rows, size_t Cols>
 struct MinMat

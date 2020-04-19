@@ -22,6 +22,19 @@ struct ForwardKinematics
     }
 };
 
+
+struct ForwardKinematicsPts
+{
+    __host__ __device__ 
+    mt::Point operator()(const mt::State& state)
+    {
+        URKForwardKinematics fk;
+        fk.solve(state);
+        return mt::affine_to_point(fk.transform_base_to_ee());
+    }
+};
+
+
 template <size_t NumPoints>
 struct InverseKinematics
 {
